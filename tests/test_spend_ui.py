@@ -8,7 +8,7 @@ from tests import test_insights_ui as ui
 
 FNS = ("esc", "fmtDuration", "fmtCount", "fmtMoney", "fmtPct", "fmtClock", "fmtModelShort", "insMetric", "cardKey",
        "insCard", "insEmpty", "insRank", "plural", "spendFmt", "spendSeries", "spendReadout", "spendChart", "spendHtml",
-       "renderSpend")
+       "priceNote", "renderSpend")
 
 
 def run_js(body, summary):
@@ -42,6 +42,11 @@ class TestSpendTab(unittest.TestCase):
         self.assertIn(">" + money(sp["main_total"]) + "</strong><span>main session</span>", self.html)
         self.assertIn(">" + money(sp["agents_total"]) + "</strong><span>agents</span>", self.html)
         self.assertIn("</strong><span>a minute, last 5 minutes</span>", self.html)
+
+    def test_list_prices_are_labelled(self):
+        s = json.loads(json.dumps(self.summary))
+        s["cost"].update(source="list", as_of="2026-10-12")
+        self.assertIn("spent so far (list price, as of 2026-10-12)", html_of(s))
 
     def test_the_chart_stacks_main_and_agents(self):
         self.assertIn('role="img"', self.html)

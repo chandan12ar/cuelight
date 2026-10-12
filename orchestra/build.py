@@ -368,6 +368,7 @@ class RunBuilder:
             unpriced.update(self._table.cost(a.tokens_by_model)[1])
         total = agents_total + main_cost
         block = {"enabled": True, "currency": self._table.currency,
+                 "source": self._table.source, "as_of": self._table.as_of,
                  "total": total, "agents": agents_total,
                  "orchestrator": main_cost,
                  "partial": bool(unpriced), "unpriced_models": sorted(unpriced),

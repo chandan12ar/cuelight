@@ -139,11 +139,11 @@ def cmd_serve(args) -> int:
     session_id = _resolve_session(args)
     token = args.token or secrets.token_urlsafe(24)
     from orchestra import history as history_mod
-    from orchestra.pricing import PriceSource
+    from orchestra.pricing import default_source
     # History persists data after the session is gone, so it is opt-in only.
     store = history_mod.HistoryStore() if history_mod.enabled() else None
     service = OrchestraService(token=token, default_session=session_id,
-                               spool_factory=_make_spool, prices=PriceSource(),
+                               spool_factory=_make_spool, prices=default_source(),
                                history=store)
 
     port = args.port
@@ -289,6 +289,7 @@ def cmd_stop(args) -> int:
 def cmd_report(args) -> int:
     from orchestra.build import RunBuilder
     from orchestra.locate import find_session
+    from orchestra.pricing import default_source
     from orchestra.report import write_report
 
     session_id = _resolve_session(args)
@@ -302,7 +303,7 @@ def cmd_report(args) -> int:
     # process happens to be: the slash command runs from the plugin directory.
     if not os.path.isabs(target):
         target = os.path.join(base, target) if target else base + os.sep
-    written = write_report(RunBuilder(paths), target)
+    written = write_report(RunBuilder(paths, prices=default_source()), target)
     print(written)
     return 0
 
@@ -311,7 +312,7 @@ def cmd_export(args) -> int:
     from orchestra import export as export_mod
     from orchestra.build import RunBuilder
     from orchestra.locate import find_session
-    from orchestra.pricing import PriceSource
+    from orchestra.pricing import default_source
 
     session_id = _resolve_session(args)
     paths = find_session(session_id)
@@ -319,7 +320,7 @@ def cmd_export(args) -> int:
         print("no transcript found for session: {}".format(session_id or "(none)"))
         return 2
     summary = RunBuilder(paths, spool=_make_spool(),
-                         prices=PriceSource()).refresh().to_summary_dict()
+                         prices=default_source()).refresh().to_summary_dict()
     content_type, body, name = export_mod.render(summary, args.export)
     target = args.out or os.path.join(args.cwd or os.getcwd(), name)
     if os.path.isdir(target):

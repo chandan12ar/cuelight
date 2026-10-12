@@ -365,7 +365,7 @@ function spendHtml(run, width) {
   const money = sp.unit === "money";
   const split = state.spendSplit === "model" ? "model" : "who";
   const minutes = Math.max((sp.end - sp.start) / 60, 1 / 60);
-  const metrics = [insMetric(spendFmt(sp, sp.total), money ? "spent so far" : "fresh tokens"),
+  const metrics = [insMetric(spendFmt(sp, sp.total), money ? "spent so far" + (priceNote(run.cost) ? " (" + priceNote(run.cost) + ")" : "") : "fresh tokens"),
     insMetric(spendFmt(sp, sp.main_total), "main session"), insMetric(spendFmt(sp, sp.agents_total), "agents"),
     insMetric(spendFmt(sp, sp.total / minutes), "a minute on average")];
   if (sp.rate_now !== null && sp.rate_now !== undefined) metrics.push(insMetric(spendFmt(sp, sp.rate_now), "a minute, last 5 minutes"));

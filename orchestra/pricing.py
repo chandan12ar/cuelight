@@ -1,8 +1,8 @@
-"""Turning token counts into money, from a price table the USER supplies.
+"""Turning token counts into money.
 
-Prices change and differ by contract, so none are built in: a number baked into
-the code would be quietly wrong the day pricing moves. Without a price file the
-dashboard shows tokens only and says how to enable cost.
+Your own price file wins: prices differ by contract. Without one, Cuelight uses Anthropic's public
+list prices (orchestra.listprices), labelled with the date they were checked wherever they are
+shown; ORCHESTRA_PRICES=off shows tokens only.
 
 File format (JSON), prices per MILLION tokens, first matching pattern wins:
 
@@ -53,9 +53,13 @@ class PriceError(ValueError):
 
 class PriceTable:
     def __init__(self, models: List[Tuple[str, Dict[str, float]]],
-                 currency: str = "USD") -> None:
+                 currency: str = "USD", source: str = "yours", as_of: str = "") -> None:
         self.models = models
         self.currency = currency
+        # Where the prices came from: "yours" (your price file) or "list" (orchestra.listprices,
+        # Anthropic's public prices on the date in as_of). Shown next to every figure it prices.
+        self.source = source
+        self.as_of = as_of
 
     @staticmethod
     def parse(raw: Any) -> "PriceTable":
@@ -111,22 +115,29 @@ class PriceTable:
 class PriceSource:
     """The price file, re-read whenever it changes on disk.
 
-    Never raises: a missing file means "cost not enabled", a broken one is
-    reported in `error` so the dashboard can say so instead of showing nothing.
+    Never raises: a missing file means the fallback prices (the list prices) or, with none,
+    "cost not enabled"; a broken one is reported in `error` so the dashboard can say so
+    instead of showing nothing.
     """
 
-    def __init__(self, path: Optional[str] = None) -> None:
+    def __init__(self, path: Optional[str] = None,
+                 fallback: Optional[PriceTable] = None) -> None:
+        # ORCHESTRA_PRICES=off: no cost at all, not even the built-in list prices.
+        self.off = path is None and os.environ.get("ORCHESTRA_PRICES", "").strip().lower() == "off"
         self.path = path or default_prices_path()
+        self.fallback = fallback
         self._stamp: Optional[Tuple[int, int]] = None
         self._table: Optional[PriceTable] = None
         self.error: str = ""
 
     def get(self) -> Optional[PriceTable]:
+        if self.off:
+            return None
         try:
             info = os.stat(self.path)
         except OSError:
             self._stamp, self._table, self.error = None, None, ""
-            return None
+            return self.fallback
         stamp = (info.st_mtime_ns, info.st_size)
         if stamp != self._stamp:
             self._stamp = stamp
@@ -138,3 +149,9 @@ class PriceSource:
                 self._table = None
                 self.error = "prices file unusable: {}".format(exc)
         return self._table
+
+
+def default_source() -> "PriceSource":
+    """Your price file, falling back to the dated list prices (orchestra.listprices)."""
+    from orchestra import listprices
+    return PriceSource(fallback=listprices.table())

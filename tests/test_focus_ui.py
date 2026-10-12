@@ -110,7 +110,7 @@ AGENTS = ("esc", "fileName", "checkText", "fmtDuration", "fmtCount", "fmtMoney",
           "agentFlags", "agentSpend", "agentSortValue", "agentsRows", "agentsHtml", "renderAgents")
 SPEND = ("esc", "fmtDuration", "fmtCount", "fmtMoney", "fmtPct", "fmtClock", "fmtModelShort", "insMetric", "cardKey",
          "insCard", "insEmpty", "insRank", "plural", "spendFmt", "spendSeries", "spendReadout", "spendChart", "spendHtml",
-         "renderSpend")
+         "priceNote", "renderSpend")
 HISTORY = ("esc", "fmtCount", "fmtDuration", "fmtMoney", "fmtPct", "fmtWhen", "fmtHistoryValue", "deltaVerdict",
            "renderHistory", "renderCompare")
 

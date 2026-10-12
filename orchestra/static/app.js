@@ -139,6 +139,11 @@ function fmtMoney(amount, currency) {
   return symbol + (amount >= 100 ? amount.toFixed(0) : amount.toFixed(2));
 }
 
+// A figure priced from the built-in list prices says so (orchestra/listprices.py).
+function priceNote(cost) {
+  return cost && cost.enabled && cost.source === "list" && cost.as_of ? "list price, as of " + cost.as_of : "";
+}
+
 function fmtCount(n) {
   if (n > 1000000) return (n / 1000000).toFixed(1) + "M";
   if (n > 1000) return (n / 1000).toFixed(1) + "k";
