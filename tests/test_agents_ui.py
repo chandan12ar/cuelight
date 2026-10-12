@@ -8,7 +8,7 @@ from tests import test_insights_ui as ui
 
 FNS = ("esc", "fileName", "checkText", "fmtDuration", "fmtCount", "fmtMoney", "fmtModelShort", "statusVar", "insMetric", "cardKey", "insCard",
        "insEmpty", "plural", "liveSpan", "waitNow", "agentMatchesFilter", "agentFlags", "agentSpend",
-       "agentSortValue", "agentsRows", "agentsHtml", "renderAgents")
+       "agentSortValue", "agentsRows", "agentsHtml", "priceNote", "renderAgents")
 
 PRE = "state.filterStatuses = new Set(); state.filterText = '';\n"
 
@@ -121,6 +121,18 @@ class TestAgentsTable(unittest.TestCase):
         html = html_of(s)
         self.assertIn('data-sort="cost">Tokens<', html)
         self.assertNotIn("$", html)
+
+    def test_list_prices_are_labelled_on_the_cost_column(self):
+        s = json.loads(json.dumps(self.summary))
+        s["cost"].update(source="list", as_of="2026-10-12")
+        self.assertIn('data-sort="cost" title="list price, as of 2026-10-12">Cost (list price)<', html_of(s))
+
+    def test_your_own_prices_leave_the_cost_column_alone(self):
+        s = json.loads(json.dumps(self.summary))
+        s["cost"].update(source="yours", as_of="")
+        html = html_of(s)
+        self.assertIn('data-sort="cost">Cost<', html)
+        self.assertNotIn("list price", html)
 
     def test_an_unstated_deliverable_says_so(self):
         s = json.loads(json.dumps(self.summary))

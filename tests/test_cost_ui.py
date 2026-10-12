@@ -131,6 +131,19 @@ class TestHeader(unittest.TestCase):
     def test_enabled_shows_the_total(self):
         self.assertIn("$2.00 cost", self.texts(self.render(run_with_cost(self.cost()))))
 
+    def test_list_prices_are_labelled_in_the_header(self):
+        parts = self.render(run_with_cost(self.cost(source="list", as_of="2026-10-12")))
+        cost = [p for p in parts if "cost" in p["text"]][0]
+        self.assertIn("$2.00 cost (list price)", cost["text"])
+        self.assertIn("list price, as of 2026-10-12", cost["title"])
+        self.assertIn("agents $1.50 + orchestrator $0.50", cost["title"])
+
+    def test_your_own_prices_are_not_labelled_in_the_header(self):
+        parts = self.render(run_with_cost(self.cost(source="yours", as_of="")))
+        cost = [p for p in parts if "cost" in p["text"]][0]
+        self.assertNotIn("list price", cost["text"])
+        self.assertNotIn("list price", cost["title"])
+
     def test_partial_is_labelled_and_names_the_unpriced_model(self):
         parts = self.render(run_with_cost(self.cost(partial=True, unpriced_models=["mystery-9"])))
         cost = [p for p in parts if "cost" in p["text"]][0]

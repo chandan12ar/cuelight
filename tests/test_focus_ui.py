@@ -107,7 +107,7 @@ PROMPTS = ("esc", "fmtDuration", "fmtCount", "fmtPct", "fmtMoney", "fmtClock", "
            "insCard", "cardKey", "insEmpty", "fileLabel", "promptsHtml", "renderPrompts")
 AGENTS = ("esc", "fileName", "checkText", "fmtDuration", "fmtCount", "fmtMoney", "fmtModelShort", "statusVar",
           "insMetric", "cardKey", "insCard", "insEmpty", "plural", "liveSpan", "waitNow", "agentMatchesFilter",
-          "agentFlags", "agentSpend", "agentSortValue", "agentsRows", "agentsHtml", "renderAgents")
+          "agentFlags", "agentSpend", "agentSortValue", "agentsRows", "agentsHtml", "priceNote", "renderAgents")
 SPEND = ("esc", "fmtDuration", "fmtCount", "fmtMoney", "fmtPct", "fmtClock", "fmtModelShort", "insMetric", "cardKey",
          "insCard", "insEmpty", "insRank", "plural", "spendFmt", "spendSeries", "spendReadout", "spendChart", "spendHtml",
          "priceNote", "renderSpend")

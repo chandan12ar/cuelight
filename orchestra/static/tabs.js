@@ -174,11 +174,12 @@ function agentsHtml(run) {
   if (!rows.length) {
     return insCard("Agents", "", bar + insEmpty(state.agentsFlagged ? "No agent needs a look right now." : "No agent matches the filter."), "wide");
   }
-  const head = (label, key) => {
+  const listed = priceNote(run.cost);
+  const head = (label, key, tip) => {
     if (!key) return "<th>" + esc(label) + "</th>";
     const on = sort.key === key;
     return '<th aria-sort="' + (on ? (sort.dir > 0 ? "ascending" : "descending") : "none") + '"><button type="button" data-sort="' +
-      key + '">' + esc(label) + "</button></th>";
+      key + '"' + (tip ? ' title="' + esc(tip) + '"' : "") + ">" + esc(label) + "</button></th>";
   };
   const text = (value, empty) => (value ? '<span title="' + esc(value) + '">' + esc(value) + "</span>"
     : '<em class="muted">' + esc(empty) + "</em>");
@@ -210,7 +211,7 @@ function agentsHtml(run) {
   }).join("");
   const table = '<div class="agents-wrap"><table class="agents-table" aria-label="Agents"><thead><tr>' +
     head("Agent", "start") + head("Asked") + head("Expected") + head("Came back") + head("Status", "status") +
-    head("Checked", "checked") + head("Time", "time") + head(money ? "Cost" : "Tokens", "cost") + head("Errors", "errors") +
+    head("Checked", "checked") + head("Time", "time") + head(money ? "Cost" + (listed ? " (list price)" : "") : "Tokens", "cost", listed) + head("Errors", "errors") +
     "</tr></thead><tbody>" + body + "</tbody></table></div>";
   return insCard("Agents",
     "Every agent on one row: what it was asked, what its brief said to deliver, and the start of what it reported back. " +

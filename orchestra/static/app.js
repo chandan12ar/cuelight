@@ -1386,11 +1386,12 @@ function renderCostPart(run) {
   const span = document.createElement("span");
   span.setAttribute("data-k", "cost");
   if (cost.enabled) {
+    const listed = priceNote(cost);
     const strong = document.createElement("strong");
     strong.textContent = costText(cost);
     span.appendChild(strong);
     const label = document.createElement("em");
-    label.textContent = cost.partial ? " cost (partial)" : " cost";
+    label.textContent = (cost.partial ? " cost (partial)" : " cost") + (listed ? " (list price)" : "");
     span.appendChild(label);
     if (cost.budget && cost.budget.state !== "ok") span.className = "cost-" + cost.budget.state;
     if (cost.budget) {
@@ -1406,6 +1407,7 @@ function renderCostPart(run) {
     if (cost.budget) notes.push(Math.round(cost.budget.ratio * 100) + "% of budget");
     notes.push("agents " + fmtMoney(cost.agents, cost.currency) +
       " + orchestrator " + fmtMoney(cost.orchestrator, cost.currency));
+    if (listed) notes.push(listed);
     span.title = notes.join(" \u00b7 ");
   } else if (cost.error) {
     span.className = "cost-warn";
