@@ -156,3 +156,39 @@ console.log(JSON.stringify({items: items.map((i) => [i.textContent, i.attrs["dat
         self.assertEqual(out["opened"], ["drawer:a1"])
         # A replay shows an earlier moment: the list is for now, so it stays out.
         self.assertEqual(self.health(dict(run_, replay_at=100))["items"], [])
+
+    def test_an_error_keeps_the_numbers_it_has(self):
+        failed = dict(self.USUAL, state="error", error="past runs unreadable: disk full", groups=self.USUAL["groups"][:1])
+        html = self.usual_html(failed)
+        self.assertIn("past runs unreadable: disk full", html)
+        self.assertIn("<td>general-purpose</td><td>sonnet-5</td>", html)
+        self.assertLess(html.index("unreadable"), html.index("<table>"))
+        alone = self.usual_html({"state": "error", "error": "<b>x</b>", "groups": []})
+        self.assertIn("&lt;b&gt;x&lt;/b&gt;", alone)
+        self.assertNotIn("<table>", alone)
+
+    def test_numbers_that_arrive_after_a_session_switch_are_dropped(self):
+        js = ui.read("advice.js")
+        start = js.index("async function loadUsual(")
+        source = js[start:js.index("\n}\n", start) + 3]
+        body = source + """
+const drawn = [], asked = [];
+let release;
+function api(path) { asked.push(state.sessionId); return new Promise((resolve) => { release = resolve; }); }
+function renderAdvice(run) { drawn.push(state.usual.sessions); }
+state.view = "advice"; state.run = {}; state.sessionId = "s1";
+(async () => {
+  const first = loadUsual();
+  state.sessionId = "s2"; state.usual = undefined;          // the user switched while it was on its way
+  release({state: "ready", sessions: 1, groups: []});
+  await first;
+  const dropped = [state.usual === undefined, drawn.length, state.usualLoading];
+  release({state: "ready", sessions: 2, groups: []});       // the fresh load, for the current session
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  console.log(JSON.stringify({dropped, asked, drawn, kept: state.usual.sessions, loading: state.usualLoading}));
+})();
+"""
+        out = ui.run_js((), [], body)
+        self.assertEqual(out["dropped"], [True, 0, True])      # nothing kept or drawn; a new load is under way
+        self.assertEqual(out["asked"], ["s1", "s2"])
+        self.assertEqual((out["drawn"], out["kept"], out["loading"]), ([2], 2, False))

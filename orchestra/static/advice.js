@@ -152,8 +152,11 @@ function adviceUsualHtml(usual) {
   const head = '<section class="advice-usual"><h3>Your usual</h3>';
   if (!usual) return head + '<p class="advice-note">Loading your past runs\u2026</p></section>';
   if (usual.state === "off") return "";
-  if (usual.state === "error") return head + '<p class="advice-note">' + esc(usual.error || "Could not read your past runs.") + "</p></section>";
   const groups = usual.groups || [];
+  // A failed rescan keeps the numbers already read: show what went wrong, and the numbers under it.
+  const problem = usual.state === "error"
+    ? '<p class="advice-note">' + esc(usual.error || "Could not read your past runs.") + "</p>" : "";
+  if (usual.state === "error" && !groups.length) return head + problem + "</section>";
   if (!groups.length) {
     return head + '<p class="advice-note">' + (usual.state === "scanning" ? "Learning from your past runs\u2026"
       : "No finished agents in your past sessions yet. Cuelight learns what each kind of agent usually takes from them.") +
@@ -162,7 +165,7 @@ function adviceUsualHtml(usual) {
   const enough = groups.filter((g) => g.enough);
   const few = groups.filter((g) => !g.enough);
   const price = usual.source === "list" ? " Costs: list price, as of " + usual.as_of + "." : "";
-  let html = head + '<p class="advice-note">' + esc("From " + plural(usual.sessions, "past session", "past sessions") +
+  let html = head + problem + '<p class="advice-note">' + esc("From " + plural(usual.sessions, "past session", "past sessions") +
     ". Typical is the middle run; slow case is the 90th percentile." + price) + "</p>";
   if (enough.length) {
     const num = (v) => '<td class="num">' + esc(v) + "</td>";
@@ -185,9 +188,17 @@ function adviceUsualHtml(usual) {
 async function loadUsual() {
   if (state.offline || state.usualLoading) return;
   state.usualLoading = true;
-  try { state.usual = await api("/api/usual"); }
-  catch (err) { state.usual = { state: "error", error: "Could not load your usual numbers.", groups: [] }; }
+  const asked = state.sessionId;
+  let answer;
+  try { answer = await api("/api/usual"); }
+  catch (err) { answer = { state: "error", error: "Could not load your usual numbers.", groups: [] }; }
   finally { state.usualLoading = false; }
+  if (asked !== state.sessionId) {
+    // The session changed while this was on its way: these numbers are for the old project. Drop them.
+    if (state.view === "advice") loadUsual();
+    return;
+  }
+  state.usual = answer;
   if (state.view === "advice" && state.run) renderAdvice(state.run);
   if (state.usual && state.usual.state === "scanning" && state.view === "advice") setTimeout(loadUsual, 3000);
 }

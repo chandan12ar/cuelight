@@ -664,10 +664,49 @@ class TestOverUsual(unittest.TestCase):
         self.assertAlmostEqual(c["impact"]["seconds"], 720.0)
         self.assertIn("No other card explains it", c["fix"]["text"])
 
-    def test_it_points_to_the_other_cards_on_that_agent(self):
+    def test_a_card_that_cannot_explain_the_overage_is_not_named(self):
         a = agent(start=0.0, end=900.0, usual=usual(), verification=unchecked())
-        (c,) = rule(run([a]), "over_usual")
-        self.assertIn("Reported done without running the tests", c["fix"]["text"])
+        out = cards(run([a]))
+        self.assertIn("verify", [c["rule"] for c in out])               # it is shown, but it says nothing about time
+        (c,) = [c for c in out if c["rule"] == "over_usual"]
+        self.assertIn("No other card explains it", c["fix"]["text"])
+        self.assertNotIn("Reported done", c["fix"]["text"])
+
+    def waiting_agent(self, **kw):
+        """An agent that sat 90 s at three permission prompts for `pytest`."""
+        log = errlog(calls=[[100.0 * i, "Bash", "pytest", True, "", same_key("pytest")] for i in range(1, 4)])
+        waits = [Wait(agent_id="a1", kind=PERMISSION, start=100.0 * i + 0.5, end=100.0 * i + 30.5, state=ANSWERED)
+                 for i in range(1, 4)]
+        return run([agent("a1", errors=log, **kw)], waits=waits)
+
+    def test_a_preapprove_card_on_that_agent_explains_a_time_overage(self):
+        out = cards(self.waiting_agent(start=0.0, end=900.0, usual=usual()))
+        (c,) = [c for c in out if c["rule"] == "over_usual"]
+        self.assertEqual(c["title"], "Took far longer than usual")
+        self.assertEqual(c["fix"]["text"], "Other cards here explain part of it: Pre-approve a command you kept approving.")
+
+    def test_a_rebuilt_cache_explains_a_cost_overage_but_not_a_time_one(self):
+        log = WasteLog()
+        log.calls = OrderedDict([("m1", [0.0, "claude-sonnet-5", 50_000, 0, 10, 10]),
+                                 ("m2", [4000.0, "claude-sonnet-5", 200_000, 0, 10, 10])])
+        dear = agent(start=0.0, end=100.0, usual=usual(), waste=log, cost=1.20)
+        out = cards(run([dear]))
+        (c,) = [c for c in out if c["rule"] == "over_usual"]
+        self.assertEqual(c["title"], "Cost far more than usual")
+        self.assertEqual(c["fix"]["text"], "Other cards here explain part of it: The cache was rebuilt after a break.")
+        slow = agent(start=0.0, end=900.0, usual=usual(), waste=log)
+        (c,) = [c for c in cards(run([slow])) if c["rule"] == "over_usual"]
+        self.assertEqual(c["title"], "Took far longer than usual")
+        self.assertIn("No other card explains it", c["fix"]["text"])
+
+    def test_a_card_is_never_named_for_another_agent(self):
+        r = self.waiting_agent(start=0.0, end=100.0, usual=usual())     # a1 waited on you but was not slow
+        r.agents.append(agent("a2", start=0.0, end=900.0, usual=usual()))
+        out = cards(r)
+        self.assertIn("preapprove", [c["rule"] for c in out])
+        (c,) = [c for c in out if c["rule"] == "over_usual"]
+        self.assertEqual(c["agents"], ["a2"])
+        self.assertIn("No other card explains it", c["fix"]["text"])
 
     def test_within_usual_or_not_enough_runs(self):
         self.assertEqual(rule(run([agent(start=0.0, end=390.0, usual=usual())]), "over_usual"), [])
@@ -683,6 +722,57 @@ class TestOverUsual(unittest.TestCase):
         self.assertEqual(c["title"], "Cost far more than usual")
         self.assertIn("4.0x the usual $0.30", c["happened"])
         self.assertAlmostEqual(c["impact"]["cost"], 0.90)
+
+    def unpriced(self, tokens, **kw):
+        return agent(start=0.0, end=100.0, usual=usual(typical_cost=None, slow_cost=None), tokens=tokens, **kw)
+
+    def test_an_unpriced_agent_far_over_its_usual_tokens(self):
+        (c,) = rule(run([self.unpriced({"input": 400_000, "output": 50_000})]), "over_usual")
+        self.assertEqual(c["title"], "Used far more tokens than usual")
+        self.assertIn("used 450.0k tokens, 5.9x the usual 76.0k", c["happened"])
+        self.assertEqual(c["impact"], {"seconds": 0.0, "tokens": 374_000, "cost": None, "label": "over usual"})
+        self.assertIn("No other card explains it", c["fix"]["text"])
+
+    def test_tokens_are_the_fallback_only_when_cost_cannot_be_compared(self):
+        big = {"input": 400_000, "output": 50_000}
+        self.assertEqual(rule(run([self.unpriced({"input": 140_000, "output": 5_000})]), "over_usual"), [])
+        self.assertEqual(rule(run([self.unpriced(big, cost=None)]), "over_usual")[0]["title"],
+                         "Used far more tokens than usual")
+        priced = agent(start=0.0, end=100.0, usual=usual(), tokens=big, cost=0.40)   # costs about the usual
+        self.assertEqual(rule(run([priced]), "over_usual"), [])
+        no_usual_tokens = usual(typical_cost=None, slow_cost=None, typical_tokens=0, slow_tokens=0)
+        self.assertEqual(rule(run([agent(start=0.0, end=100.0, usual=no_usual_tokens, tokens=big)]), "over_usual"), [])
+
+    def test_a_rebuilt_cache_explains_a_tokens_overage(self):
+        log = WasteLog()
+        log.calls = OrderedDict([("m1", [0.0, "claude-sonnet-5", 50_000, 0, 10, 10]),
+                                 ("m2", [4000.0, "claude-sonnet-5", 200_000, 0, 10, 10])])
+        out = cards(run([self.unpriced({"input": 400_000, "output": 50_000}, waste=log)]))
+        (c,) = [c for c in out if c["rule"] == "over_usual"]
+        self.assertIn("The cache was rebuilt after a break", c["fix"]["text"])
+
+    def test_a_usual_time_of_zero_gives_no_slow_row(self):
+        a = agent(status=C.RUNNING, start=0.0, end=None, usual=usual(typical_s=0.0, slow_s=0.0))
+        self.assertEqual(advice.compute(run([a]), 1000.0)["slow"], [])
+
+    def test_an_information_card_sorts_after_a_fix_card_whatever_it_cost(self):
+        info = advice._card("k1", "over_usual", "sure", "info", "Info", "h", ["a1"], "none", "", cost=5.0)
+        fix = advice._card("k2", "compact", "sure", "fix", "Fix", "h", ["a2"], "habit", "x", cost=0.5)
+        failure = advice._card("k3", "failure", "sure", "failure", "Failure", "h", ["a3"], "none", "", seconds=61.0)
+        self.assertEqual([c["title"] for c in advice._select([info, fix, failure])], ["Failure", "Fix", "Info"])
+
+    def test_the_verdict_counts_only_what_there_is_something_to_fix(self):
+        slow = agent("a2", start=0.0, end=900.0, usual=usual())
+        only = advice.compute(run([slow]), 10_000.0)
+        self.assertEqual([c["rule"] for c in only["cards"]], ["over_usual"])
+        self.assertEqual(only["parts"][-1], "nothing to fix")
+        both = advice.compute(run([agent("a1", status=C.FAILED), slow]), 10_000.0)
+        self.assertEqual(sorted(c["rule"] for c in both["cards"]), ["failure", "over_usual"])
+        self.assertEqual(both["parts"][-1], "1 thing to fix")
+        self.assertEqual(both["cards"][0]["rule"], "failure")
+        one_fix = advice.compute(run([agent("a1", verification=unchecked()), slow]), 10_000.0)
+        self.assertEqual([c["rule"] for c in one_fix["cards"]], ["verify", "over_usual"])
+        self.assertEqual(one_fix["parts"][-1], "1 thing to fix")
 
     def test_a_running_agent_far_over_usual_goes_to_the_health_box(self):
         a = agent(status=C.RUNNING, start=0.0, end=None, usual=usual())

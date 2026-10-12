@@ -126,9 +126,13 @@ def _worth_showing(card: Dict[str, Any]) -> bool:
     return imp["seconds"] >= MIN_SECONDS or imp["tokens"] >= MIN_TOKENS or (imp["cost"] or 0.0) >= MIN_COST
 
 
+SEVERITY_RANK = {"failure": 0, "fix": 1, "info": 2}      # what to look at first
+
+
 def _order(card: Dict[str, Any]):
     imp = card["impact"]
-    return (card["severity"] != "failure", -(imp["cost"] or 0.0), -imp["seconds"], -imp["tokens"], card["key"])
+    return (SEVERITY_RANK.get(card["severity"], len(SEVERITY_RANK)), -(imp["cost"] or 0.0), -imp["seconds"],
+            -imp["tokens"], card["key"])
 
 
 def _finish(card: Dict[str, Any]) -> Dict[str, Any]:
@@ -613,39 +617,65 @@ def _usual_line(u: Dict[str, Any]) -> str:
                                           "this project" if u["scope"] == "project" else "your projects")
 
 
+def _far_over(value: float, typical: Optional[float], slow: Optional[float]) -> bool:
+    """Past the slow case AND more than OVER_RATIO times typical. There is no ratio against a typical of 0."""
+    return typical is not None and slow is not None and typical > 0 and value > slow and value > OVER_RATIO * typical
+
+
 def _over_usual_cards(run: Any, now: float, table: Any) -> List[Dict[str, Any]]:
+    """A finished agent far over what its kind usually takes: in time, else in cost, else (when it or the usual
+    has no cost) in tokens. `over` is kept on the raw card, for _explain_over_usual; _finish drops it."""
     out = []
     for agent in run.agents:
         u = agent.usual
         d = agent.duration_s
         if not u or not u.get("enough") or agent.status != C.COMPLETED or d is None:
             continue
-        long = u["typical_s"] > 0 and d > u["slow_s"] and d > OVER_RATIO * u["typical_s"]   # no ratio against 0 s
-        dear = (agent.cost is not None and u.get("typical_cost") and u.get("slow_cost") is not None
-                and agent.cost > u["slow_cost"] and agent.cost > OVER_RATIO * u["typical_cost"])
-        if not (long or dear):
+        long = _far_over(d, u["typical_s"], u["slow_s"])
+        costed = agent.cost is not None and bool(u.get("typical_cost")) and u.get("slow_cost") is not None
+        dear = costed and _far_over(agent.cost, u["typical_cost"], u["slow_cost"])
+        fresh = _fresh(agent.tokens)
+        heavy = not costed and _far_over(fresh, u.get("typical_tokens"), u.get("slow_tokens"))
+        if not (long or dear or heavy):
             continue
         if long:
+            over, title = "time", "Took far longer than usual"
             happened = "{} took {}, {:.1f}x the usual {} for {}.".format(
                 _label(agent), fmt_duration(d), d / u["typical_s"], fmt_duration(u["typical_s"]), _usual_line(u))
-        else:
+        elif dear:
+            over, title = "cost", "Cost far more than usual"
             happened = "{} cost {}, {:.1f}x the usual {} for {}.".format(
                 _label(agent), fmt_money(agent.cost), agent.cost / u["typical_cost"], fmt_money(u["typical_cost"]),
                 _usual_line(u))
-        out.append(_card("over_usual:" + agent.agent_id, "over_usual", "sure", "info",
-                         "Took far longer than usual" if long else "Cost far more than usual", happened,
-                         [agent.agent_id], "none", "",
-                         seconds=max(0.0, d - u["typical_s"]) if long else 0.0,
-                         cost=(agent.cost - u["typical_cost"]) if dear else None, label="over usual"))
+        else:
+            over, title = "tokens", "Used far more tokens than usual"
+            happened = "{} used {} tokens, {:.1f}x the usual {} for {}.".format(
+                _label(agent), fmt_count(fresh), fresh / u["typical_tokens"], fmt_count(u["typical_tokens"]),
+                _usual_line(u))
+        card = _card("over_usual:" + agent.agent_id, "over_usual", "sure", "info", title, happened,
+                     [agent.agent_id], "none", "",
+                     seconds=max(0.0, d - u["typical_s"]) if long else 0.0,
+                     tokens=max(0, fresh - int(u["typical_tokens"])) if heavy and not long else 0,
+                     cost=(agent.cost - u["typical_cost"]) if dear else None, label="over usual")
+        card["over"] = over
+        out.append(card)
     return out
 
 
+# What can explain an overage: time spent waiting on the user for a time overage; that, or a rebuilt cache,
+# for a cost or tokens overage. No other card says why an agent took longer or spent more than usual.
+EXPLAINS = {"time": ("preapprove",), "cost": ("compact", "preapprove"), "tokens": ("compact", "preapprove")}
+
+
 def _explain_over_usual(cards: List[Dict[str, Any]]) -> None:
-    """An over-usual card points to the other cards on the same agent, which say why."""
+    """An over-usual card points to the shown cards on the same agent that can explain its overage."""
     for card in cards:
         if card["rule"] != "over_usual":
             continue
-        others = [c["title"] for c in cards if c is not card and set(c["agents"]) & set(card["agents"])]
+        rules = EXPLAINS.get(card.get("over"), ())
+        titles = [c["title"] for c in cards
+                  if c["rule"] in rules and set(c["agents"]) & set(card["agents"])]
+        others = list(dict.fromkeys(titles))
         card["fix"]["text"] = ("Other cards here explain part of it: " + "; ".join(others) + "." if others else
                                "No other card explains it. Open the agent and look at its longest tool calls.")
 
@@ -658,7 +688,7 @@ def _slow(run: Any, now: float) -> List[Dict[str, Any]]:
         if not u or not u.get("enough") or agent.status not in (C.RUNNING, C.WAITING) or agent.started_at is None:
             continue
         elapsed = now - agent.started_at
-        if elapsed > u["slow_s"] and elapsed > OVER_RATIO * u["typical_s"]:
+        if _far_over(elapsed, u["typical_s"], u["slow_s"]):
             out.append({"agent_id": agent.agent_id, "elapsed_s": elapsed, "typical_s": u["typical_s"],
                         "slow_s": u["slow_s"], "n": u["n"],
                         "kind": "{} on {}".format(scrub(u["type"]), scrub(u["model"]))})
@@ -690,7 +720,9 @@ def _verdict_parts(run: Any, cards: List[Dict[str, Any]]) -> List[str]:
     if cost.get("enabled") and cost.get("total") is not None:
         parts.append(fmt_money(cost["total"], cost.get("currency")) +
                      (" (list price)" if cost.get("source") == "list" else ""))
-    parts.append(_plural(len(cards), "thing") + " to fix" if cards else "nothing to fix")
+    # An information card (it says what happened and has nothing to change) is not a thing to fix.
+    todo = [c for c in cards if c["severity"] == "failure" or c["fix"]["where"] != "none"]
+    parts.append(_plural(len(todo), "thing") + " to fix" if todo else "nothing to fix")
     return parts
 
 
