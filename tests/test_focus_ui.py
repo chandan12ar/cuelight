@@ -280,9 +280,9 @@ class TestEveryLiveViewKeepsFocus(unittest.TestCase):
     """Views redrawn on a poll note focus before writing their markup and restore it after."""
 
     def test_each_redraw_is_bracketed(self):
-        js = ui.read("app.js") + "\n" + ui.read("tabs.js")
+        js = ui.read("app.js") + "\n" + ui.read("tabs.js") + "\n" + ui.read("advice.js")
         for name in ("renderPrompts", "renderInsights", "renderAgents", "renderSpend", "renderWorkfloor",
-                     "renderFleet", "renderHistory"):
+                     "renderFleet", "renderHistory", "renderAdvice"):
             body = ui.fn(js, name)
             self.assertIn("noteFocus(box)", body, name)
             self.assertIn("restoreFocus(box, ", body, name)

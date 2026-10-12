@@ -1722,7 +1722,7 @@ function renderTimeline(run) {
 
 // ------------------------------------------------------------ view state
 
-const VIEWS = ["timeline", "graph", "agents", "insights", "spend", "prompts", "activity", "workfloor", "fleet", "history"];
+const VIEWS = ["timeline", "graph", "agents", "insights", "spend", "prompts", "activity", "workfloor", "fleet", "history", "advice"];
 
 function setView(view) {
   if (VIEWS.indexOf(view) < 0) view = "timeline";
@@ -1758,7 +1758,7 @@ const AGENT_VIEWS = ["timeline", "graph", "agents", "insights", "activity", "wor
 // that identifies it (a summary by its <details>; a control with none by its tag and first class)
 // and which of the matches it is. restoreFocus(box, spot) focuses the same control after the
 // redraw, once its handlers are bound. A control that is gone leaves focus where it fell.
-const FOCUS_NAMES = ["data-agent", "data-session", "data-prompt", "data-fold", "data-jump", "data-view", "data-sort", "data-split"];
+const FOCUS_NAMES = ["data-agent", "data-session", "data-prompt", "data-fold", "data-jump", "data-view", "data-sort", "data-split", "data-copy", "data-hide"];
 
 function focusMatches(box, spot) {
   return Array.from(box.querySelectorAll(spot.sel)).filter((el) => !spot.attr || el.getAttribute(spot.attr) === spot.value);
@@ -1803,6 +1803,7 @@ function render() {
   updateChrome();
   renderAttention(state.run);
   renderHealth(state.run);
+  renderAdviceBadge(state.run);
   renderConflicts(state.run);
   renderFilterChips();
   renderFilterCount(state.run);
@@ -1817,6 +1818,7 @@ function render() {
   else if (state.view === "prompts") renderPrompts(state.run);
   else if (state.view === "agents") renderAgents(state.run);
   else if (state.view === "spend") renderSpend(state.run);
+  else if (state.view === "advice") renderAdvice(state.run);
   else renderTicker();
 }
 
@@ -3066,7 +3068,7 @@ async function loadSessions() {
 const PALETTE_VIEWS = [
   ["timeline", "Timeline", "1"], ["graph", "Graph", "2"], ["agents", "Agents", "3"], ["insights", "Insights", "4"],
   ["spend", "Spend", "5"], ["prompts", "Prompts", "6"], ["activity", "Activity", "7"], ["workfloor", "Work Floor", "8"],
-  ["fleet", "Fleet", "9"], ["history", "History", "0"],
+  ["fleet", "Fleet", "9"], ["history", "History", "0"], ["advice", "Advice", "A"],
 ];
 const palette = { open: false, query: "", items: [], index: 0, remote: null, seq: 0, timer: null, opener: null };
 const PALETTE_SEARCH_DELAY_MS = 160;
@@ -3291,6 +3293,7 @@ function closePalette(keepFocus) {
 const SHORTCUTS = [
   [["Ctrl K", "/"], "Search agents, tool calls, files and commands"],
   [["1", "–", "0"], "Switch view"],
+  [["A"], "Advice: what to change next time"],
   [["L"], "Pause or resume live updates"],
   [["R"], "Replay the run"],
   [["F"], "Filter agents"],
@@ -3359,6 +3362,7 @@ function onGlobalKey(event) {
     if (live && !live.hidden) live.click();
     return;
   }
+  if (key === "a" || key === "A") { setView("advice"); return; }
   const index = "1234567890".indexOf(key);
   if (index >= 0 && key.length === 1 && viewAvailable(PALETTE_VIEWS[index][0])) setView(PALETTE_VIEWS[index][0]);
 }

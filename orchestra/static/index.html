@@ -95,6 +95,7 @@ try { var t = localStorage.getItem("orchestra-theme");
   <button type="button" class="tab" data-view="graph" role="tab">Graph</button>
   <button type="button" class="tab" data-view="agents" role="tab">Agents</button>
   <button type="button" class="tab" data-view="insights" role="tab">Insights</button>
+  <button type="button" class="tab" data-view="advice" role="tab">Advice <span id="advice-badge" class="badge" hidden></span></button>
   <button type="button" class="tab" data-view="spend" role="tab">Spend</button>
   <button type="button" class="tab" data-view="prompts" role="tab">Prompts</button>
   <button type="button" class="tab" data-view="activity" role="tab">Activity</button>
@@ -129,6 +130,9 @@ try { var t = localStorage.getItem("orchestra-theme");
   </section>
   <section id="view-insights" class="view" hidden>
     <div id="insights" class="insights"></div>
+  </section>
+  <section id="view-advice" class="view" hidden>
+    <div id="advice" class="advice"></div>
   </section>
   <section id="view-spend" class="view" hidden>
     <div id="spend" class="spend"></div>
@@ -183,5 +187,6 @@ try { var t = localStorage.getItem("orchestra-theme");
 
 <script src="app.js"></script>
 <script src="tabs.js"></script>
+<script src="advice.js"></script>
 </body>
 </html>

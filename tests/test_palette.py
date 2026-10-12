@@ -169,6 +169,10 @@ class TestKeyboard(unittest.TestCase):
         self.assertEqual(out["calls"], [["view", "agents"], ["view", "spend"], ["view", "history"],
                                         ["view", "timeline"]])
 
+    def test_a_opens_advice(self):
+        out = self.keys({"key": "a"}, {"key": "A"}, {"key": "a", "target": {"tagName": "INPUT"}})
+        self.assertEqual(out["calls"], [["view", "advice"], ["view", "advice"]])
+
     def test_letters_run_their_commands(self):
         out = self.keys({"key": "t"}, {"key": "r"}, {"key": "?"})
         self.assertEqual(out["calls"], [["theme"], ["replay"], ["help"]])

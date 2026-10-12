@@ -34,7 +34,7 @@ def _build_shell() -> str:
 
     swap("<title>Cuelight</title>", "<title>Cuelight report — {title}</title>")
     swap('<link rel="stylesheet" href="style.css">', "<style>\n{css}\n</style>")
-    swap('<script src="app.js"></script>\n<script src="tabs.js"></script>',
+    swap('<script src="app.js"></script>\n<script src="tabs.js"></script>\n<script src="advice.js"></script>',
          "<script>\nwindow.ORCHESTRA_RUN = {run_json};\n"
          "window.ORCHESTRA_DETAILS = {details_json};\n"
          "window.ORCHESTRA_AGENT_SPRITE = {agent_sprite_json};\n</script>\n"
@@ -111,7 +111,7 @@ def render_report(run: Run, details: Dict[str, Dict[str, Any]]) -> str:
         # The session's title when Claude Code (or you) gave it one; the id otherwise.
         title=html.escape(run.meta.title if run.meta is not None and run.meta.title else run.session_id),
         css=_read_static("style.css"),
-        js=_offline_shim(_read_static("app.js")) + "\n" + _read_static("tabs.js"),
+        js=_offline_shim(_read_static("app.js")) + "\n" + _read_static("tabs.js") + "\n" + _read_static("advice.js"),
         run_json=_script_safe(run.to_summary_dict()),
         details_json=_script_safe(details),
         agent_sprite_json=_script_safe(_agent_sprite_data_uri()),

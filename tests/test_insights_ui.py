@@ -50,7 +50,7 @@ FOCUS_FNS = ("focusMatches", "noteFocus", "restoreFocus")
 
 
 def run_js(names, consts, body):
-    js = read("app.js") + "\n" + read("tabs.js")       # the tabs of their own live in tabs.js
+    js = read("app.js") + "\n" + read("tabs.js") + "\n" + read("advice.js")   # more tabs live in tabs.js and advice.js
     names = tuple(names) + tuple(n for n in FOCUS_FNS if n not in names)
     consts = tuple(consts) + (() if "FOCUS_NAMES" in consts else ("FOCUS_NAMES",))
     prelude = "\n".join([SETUP] + [const(js, c) for c in consts] + [fn(js, n) for n in names])

@@ -158,7 +158,9 @@ class TestSpendTabWiring(unittest.TestCase):
     def test_static_reports_keep_it(self):
         from orchestra import report
         i = report._SHELL.index('data-view="spend"')
-        self.assertNotIn("hidden", report._SHELL[i - 60:i])
+        # The Spend button's own opening tag; the badge of the tab before it is not its to hide.
+        opening = report._SHELL[report._SHELL.rindex("<button", 0, i):report._SHELL.index(">", i)]
+        self.assertNotIn("hidden", opening)
 
 
 if __name__ == "__main__":

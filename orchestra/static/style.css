@@ -1046,3 +1046,36 @@ details[open] > summary .prompt-n::before { transform: rotate(90deg); }
 @media (prefers-reduced-motion: reduce) {
   .pulse *, .pulse *::after { animation: none !important; transition: none !important; }
 }
+
+/* ---------------------------------------------------------------- advice */
+.advice { display: grid; gap: 12px; max-width: 980px; }
+.advice-verdict { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding: 12px 14px;
+  border: 1px solid var(--line); border-radius: var(--r-md); background: var(--panel); }
+.advice-verdict p { margin: 0; font-weight: 600; color: var(--ink); overflow-wrap: anywhere; }
+.advice-verdict .advice-price { flex-basis: 100%; font-weight: 400; font-size: 12px; color: var(--muted); }
+.advice-card { border: 1px solid var(--line); border-left: 4px solid var(--running); border-radius: var(--r-md);
+  background: var(--panel); padding: 12px 14px; }
+.advice-card[data-severity="failure"] { border-left-color: var(--failed); }
+.advice-card[data-severity="info"] { border-left-color: var(--unknown); }
+.advice-card header { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 10px; }
+.advice-card h3 { margin: 0; font-size: 15px; color: var(--ink); flex: 1 1 220px; }
+.advice-tag { font-size: 11px; text-transform: uppercase; letter-spacing: .04em; padding: 1px 7px; border-radius: 999px;
+  border: 1px solid var(--line-strong); color: var(--muted); }
+.advice-tag[data-tag="possible"] { border-style: dashed; }
+.advice-impact { font-size: 12px; color: var(--ink-2); }
+.advice-happened { margin: 8px 0 4px; color: var(--ink-2); overflow-wrap: anywhere; }
+.advice-agents { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0; }
+.advice-agent { font: inherit; font-size: 12px; padding: 2px 8px; border: 1px solid var(--line); border-radius: 999px;
+  background: var(--panel-2); color: var(--ink); }
+button.advice-agent { cursor: pointer; }
+.advice-fix { margin-top: 8px; padding-top: 8px; border-top: 1px dashed var(--line); }
+.advice-fix p { margin: 0 0 6px; color: var(--ink); overflow-wrap: anywhere; }
+.advice-where { color: var(--muted); }
+.advice-snippet { margin: 0 0 6px; padding: 8px 10px; background: var(--panel-2); border: 1px solid var(--line);
+  border-radius: var(--r-sm); font-family: var(--mono); font-size: 12px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.advice-copy, .advice-hide, .advice-show-hidden { font: inherit; font-size: 12px; padding: 3px 10px; cursor: pointer;
+  border: 1px solid var(--line-strong); border-radius: var(--r-sm); background: var(--panel); color: var(--ink); }
+.advice-hide { margin-left: auto; }
+.advice-show-hidden { justify-self: start; }
+.advice-note { color: var(--muted); }
+.badge.badge-fail { background: var(--failed); }
