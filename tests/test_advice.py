@@ -1,14 +1,21 @@
 """Fix-it cards and the run verdict (orchestra.advice), on hand-built runs."""
 
 import hashlib
+import io
 import json
+import os
+import tempfile
 import unittest
 from collections import OrderedDict
+from contextlib import redirect_stdout
+from unittest import mock
 
 from orchestra import advice
 from orchestra import constants as C
 from orchestra import errors as error_module
 from orchestra import listprices
+from orchestra.__main__ import main, _print_safe
+from orchestra.build import RunBuilder
 from orchestra.errors import TARGET_CUT, ErrorLog
 from orchestra.livestate import ANSWERED, PERMISSION, UNANSWERED, Wait
 from orchestra.model import Agent, Batch, Edge, Round, Run, ToolCall, WriteConflict
@@ -16,6 +23,7 @@ from orchestra.pricing import PriceTable
 from orchestra.turns import TurnLog
 from orchestra.waste import WasteLog
 from tests import fake_secrets as fake
+from tests.fixtures import build_session
 
 
 def agent(aid="a1", status=C.COMPLETED, start=0.0, end=600.0, desc=None, **kw):
@@ -563,6 +571,53 @@ class TestParallel(unittest.TestCase):
         self.assertEqual(sorted(c["agents"]), ["a1", "a2", "b1", "b2"])
         self.assertEqual(c["title"], "2 groups of agents could have run together")
         self.assertAlmostEqual(c["impact"]["seconds"], 400.0)
+
+
+class TestPayload(unittest.TestCase):
+    def test_the_summary_carries_the_advice(self):
+        root = tempfile.mkdtemp()
+        summary = RunBuilder(build_session(root)).refresh().to_summary_dict()
+        self.assertEqual(set(summary["advice"]), {"parts", "cards", "slow", "failures", "priced_by", "as_of"})
+        self.assertEqual(summary["advice"]["parts"][0], "3 agents")
+
+
+class TestAdviseCommand(unittest.TestCase):
+    def setUp(self):
+        self.root = tempfile.mkdtemp()
+        build_session(self.root, "s1")
+        for key, value in (("CLAUDE_CONFIG_DIR", self.root), ("ORCHESTRA_STATE_DIR", tempfile.mkdtemp()),
+                           ("ORCHESTRA_PRICES", "off")):
+            os.environ[key] = value
+            self.addCleanup(os.environ.pop, key, None)
+
+    def test_prints_the_verdict_and_the_facts(self):
+        out = io.StringIO()
+        with redirect_stdout(out):
+            code = main(["--session", "s1", "--advise"])
+        self.assertEqual(code, 0)
+        text = out.getvalue()
+        self.assertIn("3 agents", text)
+        self.assertIn("Run facts, for follow-up questions:", text)
+        text.encode("ascii")
+
+    def test_an_unknown_session_fails_clearly(self):
+        with redirect_stdout(io.StringIO()):
+            self.assertEqual(main(["--session", "missing", "--advise"]), 2)
+
+    def test_non_ascii_survives_a_cp1252_console(self):
+        raw = io.BytesIO()
+        stream = io.TextIOWrapper(raw, encoding="cp1252")
+        with mock.patch("sys.stdout", stream):
+            _print_safe("caf\u00e9 \u2192 done")
+        stream.flush()
+        self.assertEqual(raw.getvalue().replace(b"\r\n", b"\n"), "caf\u00e9 ? done\n".encode("cp1252"))
+
+    def test_render_text_shows_each_card_with_its_fix(self):
+        r = run([agent(status=C.FAILED, errors=errlog(api=[api_error(590.0)]))])
+        r.advice = advice.compute(r, 10_000.0)
+        text = advice.render_text(r)
+        self.assertIn("1. Stopped by a usage limit [sure]", text)
+        self.assertIn("Fix (a habit):", text)
 
 
 if __name__ == "__main__":

@@ -131,6 +131,29 @@ def _resolve_session(args) -> str:
     return _latest_session_in(getattr(args, "cwd", "") or os.getcwd())
 
 
+def _print_safe(text: str) -> None:
+    """Print on any console: a character the console's encoding lacks (a Windows code page and an
+    agent description with an arrow in it) becomes "?" instead of stopping the command."""
+    encoding = getattr(sys.stdout, "encoding", None) or "utf-8"
+    print(text.encode(encoding, "replace").decode(encoding, "replace"))
+
+
+def cmd_advise(args) -> int:
+    from orchestra import advice
+    from orchestra.build import RunBuilder
+    from orchestra.locate import find_session
+    from orchestra.pricing import default_source
+
+    session_id = _resolve_session(args)
+    paths = find_session(session_id) if session_id else None
+    if paths is None:
+        print("no transcript found for session: {}".format(session_id or "(none)"))
+        return 2
+    run = RunBuilder(paths, spool=_make_spool(), prices=default_source()).refresh()
+    _print_safe(advice.render_text(run))
+    return 0
+
+
 def cmd_serve(args) -> int:
     """Foreground server. This is what the detached child process runs."""
     from orchestra.http import make_server, start_idle_watchdog
@@ -355,6 +378,8 @@ def main(argv: Optional[List[str]] = None) -> int:
     parser.add_argument("--export", choices=("csv", "json"), default=None,
                         help="write the run as CSV (one row per agent) or JSON")
     parser.add_argument("--out", default="", help="file or directory for --export")
+    parser.add_argument("--advise", action="store_true",
+                        help="print what to change next time: the run's verdict, fix-it cards and a fact sheet")
     args = parser.parse_args(argv)
 
     if args.demo:
@@ -363,6 +388,8 @@ def main(argv: Optional[List[str]] = None) -> int:
         return cmd_serve(args)
     if args.stop:
         return cmd_stop(args)
+    if args.advise:
+        return cmd_advise(args)
     if args.report is not None:
         return cmd_report(args)
     if args.export:

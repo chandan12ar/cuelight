@@ -18,6 +18,7 @@ from orchestra.events import Event, EventSpool
 from orchestra.extract import extract_expected_output, extract_objective
 from orchestra.locate import SessionPaths
 from orchestra.model import Agent, Batch, Round, Run
+from orchestra import advice
 from orchestra import insights
 from orchestra.parent import ParentIndex, parse_timestamp
 from orchestra.pricing import PriceSource, PriceTable
@@ -141,6 +142,7 @@ class RunBuilder:
         run.main_turns = self._main_turns.snapshot()
         run.main_errors = self._main_errors.snapshot()
         run.insights = insights.compute(run, now, self._table)
+        run.advice = advice.compute(run, now, self._table)
         return run
 
     # -- internals ---------------------------------------------------------

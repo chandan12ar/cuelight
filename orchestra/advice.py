@@ -619,3 +619,67 @@ def compute(run: Any, now: float, table: Any = None) -> Dict[str, Any]:
             "failures": sum(1 for c in cards if c["severity"] == "failure"),
             "priced_by": cost.get("source") if enabled else None,
             "as_of": cost.get("as_of") if enabled and cost.get("source") == "list" else None}
+
+
+# ------------------------------------------------------------------ the command line
+
+def _impact_text(impact: Dict[str, Any], currency: Optional[str]) -> str:
+    parts = []
+    if impact.get("cost"):
+        parts.append(fmt_money(impact["cost"], currency))
+    if (impact.get("seconds") or 0) >= 1:
+        parts.append(fmt_duration(impact["seconds"]))
+    if impact.get("tokens"):
+        parts.append(fmt_count(impact["tokens"]) + " tokens")
+    return (impact["label"] + ": " if parts and impact.get("label") else "") + ", ".join(parts)
+
+
+def fact_sheet(run: Any) -> List[str]:
+    """A short, scrubbed account of the run, so Claude can answer follow-up questions from facts."""
+    totals = run.totals()
+    currency = (run.cost or {}).get("currency")
+    lines = ["wall time: {}".format(fmt_duration(totals["wall_time_s"])), "agents: {}".format(totals["agents"])]
+    for agent in run.agents[:40]:
+        lines.append("- {} | {} | {} | {} | {} | {} | {} tokens{} | {} calls | {} files written | checks: {}".format(
+            agent.agent_id[:10], _label(agent), scrub(agent.agent_type) or "?", _short(agent.model), agent.status,
+            fmt_duration(agent.duration_s), fmt_count(_fresh(agent.tokens)),
+            " | " + fmt_money(agent.cost, currency) if agent.cost is not None else "",
+            len(agent.tool_calls), len(agent.files_written), (agent.verification or {}).get("state") or "-"))
+    if len(run.agents) > 40:
+        lines.append("- ... and {} more agents".format(len(run.agents) - 40))
+    tools: Dict[str, int] = {}
+    for agent in run.agents:
+        for call in agent.tool_calls:
+            tools[call.name] = tools.get(call.name, 0) + 1
+    top = sorted(tools.items(), key=lambda kv: (-kv[1], kv[0]))[:5]
+    if top:
+        lines.append("top tools: " + ", ".join("{} x{}".format(name, count) for name, count in top))
+    out = (run.insights or {}).get("outcomes") or {}
+    lines.append("write conflicts: {} | links between agents: {} | commits: {} | pull requests: {}".format(
+        len(run.write_conflicts), len(run.edges), out.get("commits", 0), out.get("prs", 0)))
+    return lines[:60]
+
+
+def render_text(run: Any) -> str:
+    """What /cuelight:open advise prints: the verdict, every card with its fix, then the fact sheet."""
+    a = run.advice or {"parts": [], "cards": [], "as_of": None}
+    currency = (run.cost or {}).get("currency")
+    lines = ["Cuelight advice", "", " | ".join(a["parts"])]
+    if a.get("as_of"):
+        lines.append("Dollar figures use Anthropic list prices as of {}.".format(a["as_of"]))
+    lines.append("")
+    if not a["cards"]:
+        lines += ["Nothing to fix in this run.", ""]
+    for i, card in enumerate(a["cards"], 1):
+        lines.append("{}. {} [{}]".format(i, card["title"], card["tag"]))
+        lines.append("   What happened: " + card["happened"])
+        cost = _impact_text(card["impact"], currency)
+        if cost:
+            lines.append("   What it cost: " + cost)
+        fix = card["fix"]
+        lines.append("   Fix ({}): {}".format(WHERE.get(fix["where"], fix["where"]), fix["text"]))
+        lines += ["      " + line for line in fix["snippet"].splitlines()]
+        lines.append("")
+    lines.append("Run facts, for follow-up questions:")
+    lines += fact_sheet(run)
+    return "\n".join(lines)

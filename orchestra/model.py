@@ -331,6 +331,8 @@ class Run:
     main_turns: Any = None
     # The main session's own API errors, failed calls and retries (orchestra.errors.ErrorLog).
     main_errors: Any = None
+    # What to change next time (orchestra.advice.compute): verdict and fix-it cards.
+    advice: Optional[Dict[str, Any]] = None
 
     def agent(self, agent_id: str) -> Optional[Agent]:
         for a in self.agents:
@@ -371,5 +373,6 @@ class Run:
             "orchestrator": self.orchestrator,
             "cost": self.cost,
             "insights": self.insights,
+            "advice": self.advice,
             "session": self.meta.to_dict() if self.meta is not None else None,
         }

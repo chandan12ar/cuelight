@@ -37,7 +37,7 @@ class TestSlashCommand(unittest.TestCase):
         # `cuelight *` covers Cuelight only, where `python *` would cover every script.
         text = read("commands", "open.md")
         blocks = re.findall(r"```bash\n(.*?)\n\s*```", text, re.DOTALL)
-        self.assertEqual(len(blocks), 3)
+        self.assertEqual(len(blocks), 4)
         for block in blocks:
             command = block.strip()
             self.assertRegex(command, r"^cuelight(\s|$)", command)
@@ -64,7 +64,7 @@ class TestSlashCommand(unittest.TestCase):
 
     def test_documents_all_three_invocations(self):
         text = read("commands", "open.md")
-        for fragment in ("--stop", "--report"):
+        for fragment in ("--stop", "--report", "--advise"):
             self.assertIn(fragment, text)
 
 
