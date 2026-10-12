@@ -11,7 +11,9 @@ from orchestra import errors as error_module
 from orchestra import listprices
 from orchestra.errors import TARGET_CUT, ErrorLog
 from orchestra.livestate import ANSWERED, PERMISSION, UNANSWERED, Wait
-from orchestra.model import Agent, Round, Run, ToolCall, WriteConflict
+from orchestra.model import Agent, Batch, Edge, Round, Run, ToolCall, WriteConflict
+from orchestra.pricing import PriceTable
+from orchestra.turns import TurnLog
 from orchestra.waste import WasteLog
 from tests import fake_secrets as fake
 
@@ -468,6 +470,77 @@ class TestPreapprove(unittest.TestCase):
         (c,) = self.waiting("git push", tool=fake.ANTHROPIC_KEY)
         self.assertNotIn(fake.ANTHROPIC_KEY, c["title"] + c["happened"])
         self.assertIn("redacted", c["title"] + c["happened"])
+
+
+class TestCheaperModel(unittest.TestCase):
+    TOKENS = {"input": 20_000, "output": 30_000, "cache_read": 2_000_000, "cache_create": 200_000}
+
+    def reader(self, model="claude-opus-5-5", n=4, tokens=None, extra=(), **kw):
+        tc = calls(*[("Read", "f%d.py" % i, float(i), True) for i in range(n)] + list(extra))
+        return agent(model=model, tool_calls=tc, tokens_by_model={model: tokens or dict(self.TOKENS)}, **kw)
+
+    def cheaper(self, a, table="list"):
+        return rule(run([a]), "cheaper_model", table=listprices.table() if table == "list" else table)
+
+    def test_an_opus_agent_that_only_read_could_use_sonnet(self):
+        (c,) = self.cheaper(self.reader())
+        self.assertEqual((c["tag"], c["fix"]["snippet"]), ("possible", "model: sonnet"))
+        self.assertAlmostEqual(c["impact"]["cost"], 2.68 - 1.54)      # opus-5-5 vs sonnet-5-5 list prices
+
+    def test_a_sonnet_agent_could_use_haiku(self):
+        (c,) = self.cheaper(self.reader(model="claude-sonnet-5"))
+        self.assertEqual(c["fix"]["snippet"], "model: haiku")
+
+    def test_an_agent_that_edited_or_ran_commands_is_left_alone(self):
+        self.assertEqual(self.cheaper(self.reader(extra=[("Edit", "a.py", 9.0, True)])), [])
+        self.assertEqual(self.cheaper(self.reader(extra=[("Bash", "ls", 9.0, True)])), [])
+
+    def test_too_few_calls_or_too_small_a_saving(self):
+        self.assertEqual(self.cheaper(self.reader(n=2)), [])
+        self.assertEqual(self.cheaper(self.reader(tokens={"input": 100, "output": 100})), [])
+
+    def test_without_prices_or_with_a_table_lacking_the_target(self):
+        self.assertEqual(self.cheaper(self.reader(), table=None), [])
+        mine = PriceTable.parse({"models": {"claude-opus-*": {"input": 5, "output": 25}}})
+        self.assertEqual(self.cheaper(self.reader(), table=mine), [])
+
+    def test_haiku_and_failed_agents_are_left_alone(self):
+        self.assertEqual(self.cheaper(self.reader(model="claude-haiku-4-5")), [])
+        self.assertEqual([c for c in self.cheaper(self.reader(status=C.FAILED)) if c["rule"] == "cheaper_model"], [])
+
+
+class TestParallel(unittest.TestCase):
+    def seq(self, gap=10.0, first=None, second=None, **kw):
+        a1 = agent("a1", start=0.0, end=200.0, **(first or {}))
+        a2 = agent("a2", start=200.0 + gap, end=500.0, **(second or {}))
+        return rule(run([a1, a2], **kw), "parallel")
+
+    def test_two_unlinked_agents_one_after_another(self):
+        (c,) = self.seq()
+        self.assertEqual(c["tag"], "possible")
+        self.assertAlmostEqual(c["impact"]["seconds"], 200.0)
+        self.assertEqual(c["agents"], ["a1", "a2"])
+
+    def test_a_handoff_between_them(self):
+        self.assertEqual(self.seq(edges=[Edge(src="a1", dst="a2", kind="handoff", confidence="inferred")]), [])
+
+    def test_a_file_one_wrote_and_the_other_read(self):
+        self.assertEqual(self.seq(first={"files_written": ["src/plan.md"]}, second={"files_read": ["src/plan.md"]}), [])
+
+    def test_a_prompt_in_between_means_you_were_deciding(self):
+        turns = TurnLog()
+        turns.turns = [{"at": 205.0}]
+        self.assertEqual(self.seq(main_turns=turns), [])
+
+    def test_a_long_gap_is_not_a_chain(self):
+        self.assertEqual(self.seq(gap=600.0), [])
+
+    def test_launched_together_is_already_parallel(self):
+        self.assertEqual(self.seq(batches=[Batch(agent_ids=["a1", "a2"])]), [])
+
+    def test_a_short_saving_is_below_the_threshold(self):
+        a1, a2 = agent("a1", start=0.0, end=30.0), agent("a2", start=40.0, end=80.0)
+        self.assertEqual(rule(run([a1, a2]), "parallel"), [])
 
 
 if __name__ == "__main__":

@@ -16,13 +16,16 @@ import re
 from typing import Any, Dict, List, Optional
 
 from orchestra import constants as C
+from orchestra import listprices
 from orchestra import livestate
 from orchestra import pressure
 from orchestra import verify
 from orchestra import waste as waste_mod
+from orchestra.edges import normalize_path
 from orchestra.errors import TARGET_CUT
 from orchestra.redact import scrub
 from orchestra.runaway import detect_loop
+from orchestra.spend import _short
 
 MIN_SECONDS = 60.0        # a card that cost less than all three of these is noise
 MIN_TOKENS = 10_000
@@ -476,9 +479,107 @@ def _preapprove_cards(run: Any, now: float, table: Any) -> List[Dict[str, Any]]:
     return out
 
 
+READ_ONLY_TOOLS = frozenset(("Read", "Grep", "Glob", "LS", "WebFetch", "WebSearch", "NotebookRead", "TodoWrite"))
+MIN_READ_CALLS = 3
+CHEAPER_SHARE = 0.30      # suggest a cheaper model only when it saves at least this share
+PARALLEL_GAP_S = 120.0    # launched this soon after the previous one ended: it was waiting on it
+
+
+def _family(model: str) -> str:
+    name = (model or "").lower()
+    return next((f for f in listprices.CHEAPER if f in name), "")
+
+
+def _cheaper_cards(run: Any, now: float, table: Any) -> List[Dict[str, Any]]:
+    if table is None:
+        return []
+    out = []
+    for agent in run.agents:
+        if agent.status != C.COMPLETED or len(agent.tool_calls) < MIN_READ_CALLS:
+            continue
+        if any(call.name not in READ_ONLY_TOOLS for call in agent.tool_calls):
+            continue
+        family = _family(agent.model)
+        if not family:
+            continue
+        alias, target = listprices.CHEAPER[family]
+        prices = table.price_for(target)
+        cost, unpriced = table.cost(agent.tokens_by_model)
+        if prices is None or unpriced or cost <= 0:
+            continue
+        alt = sum(count * prices.get(kind, 0.0) for tokens in agent.tokens_by_model.values()
+                  for kind, count in tokens.items()) / 1_000_000
+        saving = cost - alt
+        if saving < MIN_COST or saving < cost * CHEAPER_SHARE:
+            continue
+        out.append(_card("cheaper_model:{}:{}".format(scrub(agent.agent_type) or "?", family), "cheaper_model",
+                         "possible", "fix", "A cheaper model would likely have done",
+                         "{} only read and searched ({} calls, no edits or commands) on {}. It cost {}; the same "
+                         "tokens on {} would cost about {}.".format(
+                             _label(agent), len(agent.tool_calls), scrub(_short(agent.model)),
+                             fmt_money(cost, table.currency), alias, fmt_money(alt, table.currency)),
+                         [agent.agent_id], "agent",
+                         "If this kind of agent has a definition in .claude/agents/, set its model there; otherwise "
+                         "ask Claude to launch it with model {}. Check that its answers still hold up.".format(alias),
+                         "model: {}".format(alias), cost=saving, label="could save",
+                         title_many="{n} read-only agents ran on an expensive model"))
+    return out
+
+
+def _linked(a: Any, b: Any, edges: set) -> bool:
+    """Whether one agent could have needed the other: an edge, or a file one wrote that the other used."""
+    if frozenset((a.agent_id, b.agent_id)) in edges:
+        return True
+    wa, ra = {normalize_path(p) for p in a.files_written}, {normalize_path(p) for p in a.files_read}
+    wb, rb = {normalize_path(p) for p in b.files_written}, {normalize_path(p) for p in b.files_read}
+    return bool(wa & rb or wb & ra or wa & wb)
+
+
+def _chain_card(chain: List[Any]) -> List[Dict[str, Any]]:
+    if len(chain) < 2:
+        return []
+    durations = [a.duration_s or 0.0 for a in chain]
+    names = ", ".join(_label(a) for a in chain[:4]) + (" and {} more".format(len(chain) - 4) if len(chain) > 4 else "")
+    return [_card("parallel:" + ",".join(a.agent_id for a in chain), "parallel", "possible", "fix",
+                  "These agents could have run together",
+                  "{} agents ran one after another ({}) and none used another's work: no handoff, no shared "
+                  "file.".format(len(chain), names),
+                  [a.agent_id for a in chain], "habit",
+                  "When agents don't depend on each other, ask Claude to launch them in one message so they run "
+                  "at the same time.", seconds=sum(durations) - max(durations), label="could save")]
+
+
+def _parallel_cards(run: Any, now: float, table: Any) -> List[Dict[str, Any]]:
+    turns = run.main_turns.turns if run.main_turns is not None else []
+    prompts = sorted(t["at"] for t in turns if t.get("at") is not None)
+    edges = {frozenset((e.src, e.dst)) for e in run.edges}
+    batch = {aid: i for i, b in enumerate(run.batches) for aid in b.agent_ids}
+    groups: Dict[str, List[Any]] = {}
+    for a in run.agents:
+        if a.status == C.COMPLETED and a.started_at is not None and a.ended_at is not None:
+            groups.setdefault(a.parent_agent_id or "", []).append(a)
+    out: List[Dict[str, Any]] = []
+    for agents in groups.values():
+        agents.sort(key=lambda a: a.started_at)
+        chain: List[Any] = []
+        for agent in agents:
+            prev = chain[-1] if chain else None
+            joins = (prev is not None and agent.started_at >= prev.ended_at
+                     and agent.started_at - prev.ended_at <= PARALLEL_GAP_S
+                     and not any(prev.ended_at < t <= agent.started_at for t in prompts)
+                     and (batch.get(agent.agent_id) is None or batch.get(agent.agent_id) != batch.get(prev.agent_id))
+                     and not any(_linked(m, agent, edges) for m in chain))
+            if not joins:
+                out += _chain_card(chain)
+                chain = []
+            chain.append(agent)
+        out += _chain_card(chain)
+    return out
+
+
 # Every rule: fn(run, now, table) -> cards. Later rules are added to this tuple.
 RULES = (_failure_cards, _verify_cards, _worktree_cards, _compact_cards, _rules_missing_cards,
-         _preapprove_cards)
+         _preapprove_cards, _cheaper_cards, _parallel_cards)
 
 
 # ------------------------------------------------------------------ verdict
