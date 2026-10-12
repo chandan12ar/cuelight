@@ -540,13 +540,14 @@ def _chain_card(chain: List[Any]) -> List[Dict[str, Any]]:
         return []
     durations = [a.duration_s or 0.0 for a in chain]
     names = ", ".join(_label(a) for a in chain[:4]) + (" and {} more".format(len(chain) - 4) if len(chain) > 4 else "")
-    return [_card("parallel:" + ",".join(a.agent_id for a in chain), "parallel", "possible", "fix",
+    return [_card("parallel", "parallel", "possible", "fix",
                   "These agents could have run together",
                   "{} agents ran one after another ({}) and none used another's work: no handoff, no shared "
                   "file.".format(len(chain), names),
                   [a.agent_id for a in chain], "habit",
                   "When agents don't depend on each other, ask Claude to launch them in one message so they run "
-                  "at the same time.", seconds=sum(durations) - max(durations), label="could save")]
+                  "at the same time.", seconds=sum(durations) - max(durations), label="could save",
+                  title_many="{n} groups of agents could have run together")]
 
 
 def _parallel_cards(run: Any, now: float, table: Any) -> List[Dict[str, Any]]:

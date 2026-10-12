@@ -508,11 +508,23 @@ class TestCheaperModel(unittest.TestCase):
         self.assertEqual(self.cheaper(self.reader(model="claude-haiku-4-5")), [])
         self.assertEqual([c for c in self.cheaper(self.reader(status=C.FAILED)) if c["rule"] == "cheaper_model"], [])
 
+    def test_a_saving_under_a_third_of_the_cost_is_not_worth_a_card(self):
+        # opus-5-5 costs 2.4 here and sonnet-5-5 would cost 2.2: a saving of 0.20 clears the $0.05 floor,
+        # but not the 30% share.
+        tokens = {"input": 100_000, "cache_read": 10_000_000}
+        self.assertEqual(self.cheaper(self.reader(tokens=tokens)), [])
+
+    def test_the_model_name_is_scrubbed_before_it_is_shown(self):
+        (c,) = self.cheaper(self.reader(model="claude-opus-5-5-" + fake.ANTHROPIC_KEY))
+        self.assertNotIn(fake.ANTHROPIC_KEY, c["happened"])
+        self.assertNotIn(fake.ANTHROPIC_KEY, json.dumps(c))
+        self.assertIn("redacted", c["happened"])
+
 
 class TestParallel(unittest.TestCase):
     def seq(self, gap=10.0, first=None, second=None, **kw):
         a1 = agent("a1", start=0.0, end=200.0, **(first or {}))
-        a2 = agent("a2", start=200.0 + gap, end=500.0, **(second or {}))
+        a2 = agent("a2", start=200.0 + gap, end=200.0 + gap + 300.0, **(second or {}))
         return rule(run([a1, a2], **kw), "parallel")
 
     def test_two_unlinked_agents_one_after_another(self):
@@ -541,6 +553,16 @@ class TestParallel(unittest.TestCase):
     def test_a_short_saving_is_below_the_threshold(self):
         a1, a2 = agent("a1", start=0.0, end=30.0), agent("a2", start=40.0, end=80.0)
         self.assertEqual(rule(run([a1, a2]), "parallel"), [])
+
+    def test_two_groups_of_agents_are_one_card(self):
+        group = [agent("a1", start=0.0, end=200.0, parent_agent_id="p1"),
+                 agent("a2", start=210.0, end=510.0, parent_agent_id="p1"),
+                 agent("b1", start=1000.0, end=1200.0, parent_agent_id="p2"),
+                 agent("b2", start=1210.0, end=1510.0, parent_agent_id="p2")]
+        (c,) = rule(run(group), "parallel")
+        self.assertEqual(sorted(c["agents"]), ["a1", "a2", "b1", "b2"])
+        self.assertEqual(c["title"], "2 groups of agents could have run together")
+        self.assertAlmostEqual(c["impact"]["seconds"], 400.0)
 
 
 if __name__ == "__main__":
