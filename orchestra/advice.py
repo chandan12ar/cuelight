@@ -105,7 +105,7 @@ def _merge(cards: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
             imp["cost"] = (imp["cost"] or 0.0) + add["cost"]
     for card in out.values():
         if card["more"]:
-            card["title"] = card["title_many"].format(n=card["more"] + 1)
+            card["title"] = card["title_many"].replace("{n}", str(card["more"] + 1))
             card["happened"] += " (and {} more like it)".format(card["more"])
     return list(out.values())
 
@@ -137,8 +137,7 @@ def _select(cards: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
 # ------------------------------------------------------------------ failures
 
 API_FIX = {
-    "rate_limit": ("a usage limit", "Wait for the limit to reset, then resume the agent. Runs started just "
-                                    "before a reset are the ones that hit it."),
+    "rate_limit": ("a usage limit", "Wait for the limit to reset, then resume the agent."),
     "authentication_failed": ("an expired login", "Run /login, then resume the agent."),
     "server_error": ("a server error", "The API failed on Anthropic's side. Run the agent again."),
     "overloaded": ("an overloaded API", "The API was overloaded. Run the agent again in a few minutes."),
@@ -155,13 +154,14 @@ def _failure(agent: Any, now: float) -> Dict[str, Any]:
              "tokens": _fresh(agent.tokens), "cost": agent.cost, "label": "spent before it stopped"}
 
     def card(cause: str, title: str, title_many: str, happened: str, where: str, text: str,
-             snippet: str = "", merge: bool = False) -> Dict[str, Any]:
+             snippet: str = "", merge: bool = False, tag: str = "sure") -> Dict[str, Any]:
         key = "failure:{}:{}".format(cause, "" if merge else agent.agent_id)
-        return _card(key, "failure", "sure", "failure", title, happened, [agent.agent_id], where, text,
+        return _card(key, "failure", tag, "failure", title, happened, [agent.agent_id], where, text,
                      snippet, title_many=title_many, always=True, **spent)
 
     last_api = log.api[-1] if log is not None and log.api else None
-    if last_api is not None and last_api.get("at") is not None and last_api["at"] >= end - API_RECENT_S:
+    if last_api is not None and last_api.get("resumed_at") is None and last_api.get("at") is not None \
+            and last_api["at"] >= end - API_RECENT_S:
         kind = last_api.get("kind") or "error"
         what, fix = API_FIX.get(kind, ("an API error", "Run the agent again. If it happens again, read the "
                                                        "error above."))
@@ -202,7 +202,7 @@ def _failure(agent: Any, now: float) -> Dict[str, Any]:
                     "{}'s context reached {} of its window{}.".format(
                         label, fill, " and was compacted " + _plural(compactions, "time") if compactions else ""),
                     "instructions", "Split this task across two agents, each with a smaller part, so neither "
-                                    "fills its context.")
+                                    "fills its context.", merge=True, tag="sure" if compactions else "possible")
     loop = detect_loop(agent.tool_calls, C.LOOP_REPEATS, C.LOOP_CYCLE_CALLS)
     if loop is not None:
         first = loop.calls[0]
@@ -211,8 +211,13 @@ def _failure(agent: Any, now: float) -> Dict[str, Any]:
         return card("loop", "Went in circles", "{n} agents went in circles",
                     "{} repeated {} before it {}.".format(label, what, verb), "instructions",
                     "Give it a stop condition in its instructions:",
-                    "If the same step fails or repeats three times, stop and report what you tried.")
+                    "If the same step fails or repeats three times, stop and report what you tried.",
+                    merge=True, tag="possible")
     open_call = bool(agent.tool_calls) and agent.tool_calls[-1].ok is None
+    if agent.status == C.STALLED and open_call:
+        return card("quiet", "Went quiet during a tool call", "{n} agents went quiet during a tool call",
+                    "{} went quiet while a tool call was still open.".format(label), "none",
+                    "It may still be running a long command. Open the agent to check, or stop it and resume.")
     if agent.status == C.ORPHANED or open_call:
         return card("closed", "Stopped when the session ended", "{n} agents stopped when the session ended",
                     "{} {} while {}.".format(label, verb, "a tool call was still open" if open_call

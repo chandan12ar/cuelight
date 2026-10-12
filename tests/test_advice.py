@@ -56,9 +56,14 @@ class TestFailureCauses(unittest.TestCase):
         c = self.fail(errors=errlog(api=[api_error(590.0)]))
         self.assertIn("usage limit", c["title"].lower())
         self.assertIn("reset", c["fix"]["text"])
+        self.assertEqual(c["fix"]["text"], "Wait for the limit to reset, then resume the agent.")
 
     def test_an_old_api_error_is_not_the_cause(self):
         c = self.fail(errors=errlog(api=[api_error(10.0)]))
+        self.assertNotIn("usage limit", c["title"].lower())
+
+    def test_an_api_error_the_agent_recovered_from_is_not_the_cause(self):
+        c = self.fail(errors=errlog(api=[dict(api_error(590.0), resumed_at=595.0)]))
         self.assertNotIn("usage limit", c["title"].lower())
 
     def test_an_expired_login(self):
@@ -89,16 +94,59 @@ class TestFailureCauses(unittest.TestCase):
     def test_context_ran_out(self):
         log = WasteLog()
         log.calls = OrderedDict([("m1", [100.0, "claude-sonnet-5", 0, 960_000, 10, 100])])
-        self.assertIn("context", self.fail(waste=log)["title"].lower())
+        c = self.fail(waste=log)
+        self.assertIn("context", c["title"].lower())
+        self.assertEqual(c["tag"], "possible")
+
+    def test_a_compaction_makes_the_context_card_sure(self):
+        log = WasteLog()
+        log.calls = OrderedDict([("m1", [100.0, "claude-sonnet-5", 0, 960_000, 10, 100])])
+        log.compactions = [{"at": 100.0, "trigger": "auto", "pre_tokens": 960_000, "post_tokens": 40_000,
+                            "duration_s": 12.0}]
+        self.assertEqual(self.fail(waste=log)["tag"], "sure")
+
+    def test_two_agents_out_of_context_are_one_card(self):
+        def full_log():
+            log = WasteLog()
+            log.calls = OrderedDict([("m1", [100.0, "claude-sonnet-5", 0, 960_000, 10, 100])])
+            return log
+        out = cards(run([agent("a1", status=C.FAILED, waste=full_log(), tokens={"output": 4_000}),
+                         agent("a2", status=C.FAILED, waste=full_log(), tokens={"output": 4_000})]))
+        self.assertEqual(len(out), 1)
+        self.assertEqual(sorted(out[0]["agents"]), ["a1", "a2"])
+        self.assertTrue(out[0]["title"].startswith("2 agents"))
+        self.assertEqual(out[0]["impact"]["seconds"], 1200.0)
+        self.assertEqual(out[0]["impact"]["tokens"], 8_000)
 
     def test_a_loop(self):
         tc = calls(*[("Bash", "npm test", 100.0 + i, False) for i in range(C.LOOP_REPEATS)])
-        self.assertIn("circles", self.fail(tool_calls=tc)["title"])
+        c = self.fail(tool_calls=tc)
+        self.assertIn("circles", c["title"])
+        self.assertEqual(c["tag"], "possible")
+
+    def test_two_agents_in_circles_are_one_card(self):
+        tc = calls(*[("Bash", "npm test", 100.0 + i, False) for i in range(C.LOOP_REPEATS)])
+        out = cards(run([agent("a1", status=C.FAILED, tool_calls=tc),
+                         agent("a2", status=C.FAILED, tool_calls=tc)]))
+        self.assertEqual(len(out), 1)
+        self.assertEqual(sorted(out[0]["agents"]), ["a1", "a2"])
+        self.assertTrue(out[0]["title"].startswith("2 agents"))
 
     def test_cut_off_when_the_session_ended(self):
         c = cards(run([agent(status=C.ORPHANED)]))[0]
         self.assertEqual(c["fix"]["where"], "none")
         self.assertIn("session", c["title"].lower())
+
+    def test_a_stalled_agent_mid_call_went_quiet(self):
+        out = cards(run([agent(status=C.STALLED, end=None, tool_calls=calls(("Bash", "npm run e2e", 500.0, None)))]))
+        self.assertEqual(len(out), 1)
+        self.assertEqual(out[0]["title"], "Went quiet during a tool call")
+        self.assertEqual(out[0]["fix"]["where"], "none")
+        self.assertEqual(out[0]["agents"], ["a1"])
+
+    def test_a_failed_agent_mid_call_still_stopped_with_the_session(self):
+        c = self.fail(tool_calls=calls(("Bash", "npm test", 500.0, None)))
+        self.assertEqual(c["title"], "Stopped when the session ended")
 
     def test_no_cause_in_the_record_says_so(self):
         tc = calls(("Read", "a.py", 1.0, True), ("Grep", "foo", 2.0, True), ("Read", "b.py", 3.0, True))
@@ -139,6 +187,11 @@ class TestCardShape(unittest.TestCase):
         shown = advice._select(many)
         self.assertEqual(len(shown), advice.MAX_CARDS)
         self.assertEqual(shown[0]["impact"]["seconds"], 119.0)
+
+    def test_merged_titles_fill_n_without_format(self):
+        first = advice._card("k", "r", "sure", "failure", "t", "h", ["a1"], "none", "x", title_many="a {x} {n} b")
+        second = advice._card("k", "r", "sure", "failure", "t", "h", ["a2"], "none", "x", title_many="a {x} {n} b")
+        self.assertEqual(advice._merge([first, second])[0]["title"], "a {x} 2 b")
 
     def test_small_cards_are_dropped(self):
         small = advice._card("k", "compact", "sure", "fix", "t", "h", [], "habit", "x", seconds=59.0,
