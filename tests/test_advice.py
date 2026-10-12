@@ -409,6 +409,28 @@ class TestPreapprove(unittest.TestCase):
             (c,) = self.waiting(url, tool="WebFetch")
             self.assertEqual((c["fix"]["snippet"], c["fix"]["where"]), ("", "none"), url)
 
+    def test_a_host_that_runs_past_the_error_log_cut_gets_no_rule(self):
+        # orchestra.errors keeps only the first 160 characters of a target: a host that runs past them is cut.
+        probe = "https://" + "a" * 63 + "." + "b" * 63 + "." + "y" * 20 + ".com.attacker.net/x"
+        self.assertEqual(len(probe), 175)
+        (c,) = self.waiting(probe[:advice.ERROR_TARGET_CUT], tool="WebFetch")
+        self.assertEqual((c["fix"]["snippet"], c["fix"]["where"]), ("", "none"))
+        (short,) = self.waiting("https://docs.example.com/a", tool="WebFetch")
+        self.assertEqual(json.loads(short["fix"]["snippet"])["permissions"]["allow"],
+                         ["WebFetch(domain:docs.example.com)"])
+
+    def test_a_localhost_name_gets_no_rule(self):
+        # Names under .localhost resolve to this machine, so a rule for one would approve a local server.
+        for url in ("http://foo.localhost/x", "https://a.b.localhost:8080/x"):
+            (c,) = self.waiting(url, tool="WebFetch")
+            self.assertEqual((c["fix"]["snippet"], c["fix"]["where"]), ("", "none"), url)
+
+    def test_a_report_only_card_names_what_it_would_allow(self):
+        (bash,) = self.waiting("git push origin main")
+        (web,) = self.waiting("https://evil.com\\@attacker.net/x", tool="WebFetch")
+        self.assertIn("would also allow commands you have not seen", bash["fix"]["text"])
+        self.assertIn("would also allow ones you have not seen", web["fix"]["text"])
+
     def test_a_web_fetch_host_keeps_its_rule_through_a_port_and_a_query(self):
         (c,) = self.waiting("https://docs.example.com:8443/a?b", tool="WebFetch")
         self.assertEqual(json.loads(c["fix"]["snippet"])["permissions"]["allow"], ["WebFetch(domain:docs.example.com)"])

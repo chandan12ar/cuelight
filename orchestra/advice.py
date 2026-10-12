@@ -369,6 +369,7 @@ TOP_LABEL = re.compile(r"[a-z]+")                              # a domain's last
 # What an allow rule for each tool says it reaches, shown on the card so no one reads it as narrower.
 SCOPE = {"Bash": "This allows any arguments, and runs code from your project (its tests or build scripts).",
          "WebFetch": "This allows any page on that domain."}
+ERROR_TARGET_CUT = 160    # the cut length of orchestra.errors targets: a stored target this long may be cut short
 PROMPTS_ENOUGH = 3
 
 
@@ -396,11 +397,15 @@ def _is_whole(text: str, same: Any) -> bool:
 def _host(url: str) -> str:
     """The domain a WebFetch rule can name, or "". Read as one strict pattern, not as a general parser:
     a backslash or an "@" anywhere could make Python's parser and the fetch's disagree about the host, so
-    no host is taken. An address, a single-label name or a malformed label is not a domain to approve."""
+    no host is taken. An address, a single-label name, a .localhost name or a malformed label is not a
+    domain to approve, and a URL the error log cut short may have lost the end of its host."""
+    if len(url) >= ERROR_TARGET_CUT:
+        return ""
     text = url.lower()
     m = None if ("\\" in text or "@" in text) else URL_HOST.match(text)
     labels = m.group("host").split(".") if m else []
-    if len(labels) < 2 or not TOP_LABEL.fullmatch(labels[-1]) or not all(LABEL.fullmatch(x) for x in labels):
+    if len(labels) < 2 or labels[-1] == "localhost" or not TOP_LABEL.fullmatch(labels[-1]) \
+            or not all(LABEL.fullmatch(x) for x in labels):
         return ""
     return m.group("host")
 
@@ -463,8 +468,9 @@ def _preapprove_cards(run: Any, now: float, table: Any) -> List[Dict[str, Any]]:
                              seconds=g["seconds"], label="waiting on you", always=enough))
         else:
             out.append(_card(key, "preapprove", "sure", "info", "You kept approving " + what, happened, g["agents"],
-                             "none", "Not suggested for pre-approval: allowing it for good would also allow commands "
-                                     "you have not seen. Consider whether the agent needs it.",
+                             "none", "Not suggested for pre-approval: allowing it for good would also allow {} "
+                                     "you have not seen. Consider whether the agent needs it.".format(
+                                         "commands" if g["tool"] == "Bash" else "ones"),
                              seconds=g["seconds"], label="waiting on you", always=enough))
     return out
 
