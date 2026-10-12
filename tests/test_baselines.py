@@ -124,6 +124,22 @@ class TestScan(unittest.TestCase):
             s.start_if_stale()
         start.assert_not_called()
 
+    def test_a_session_with_an_unfinished_agent_is_read_again(self):
+        build_session(self.root, "s1")                 # a3 is still unfinished when it is first read
+        self.store().scan()
+        with open(self.cache, encoding="utf-8") as fh:
+            self.assertIsNone(json.load(fh)["sessions"]["s1"]["fp"])
+        two_hours_on = time.time() + 2 * 3600          # no file changed, but a3 is now cut off
+        real = baselines.rows_for
+        with mock.patch.object(baselines, "rows_for",
+                               side_effect=lambda paths: real(paths, now_fn=lambda: two_hours_on)) as reread:
+            s = self.store()
+            s.scan()
+        reread.assert_called_once()
+        self.assertEqual(len(s.rows()), 3)
+        self.assertEqual([(r["status"], r["seconds"]) for r in s.rows() if r["seconds"] is None],
+                         [("orphaned", None)])
+
     def test_a_cut_off_agent_is_kept_with_no_time(self):
         paths = build_session(self.root, "s1")
         two_hours_on = time.time() + 2 * 3600          # the session is no longer live: a3 is cut off

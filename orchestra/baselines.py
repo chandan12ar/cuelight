@@ -5,8 +5,9 @@ Claude Code keeps every session's transcripts (about 30 days by default). This r
 with the same RunBuilder the dashboard uses, and keeps NUMBERS ONLY per finished agent: no prompts,
 briefs, results, paths or commands; the project is a short hash of its folder name. The rows are
 cached in Cuelight's state directory (never ~/.claude), one entry per session, valid while the
-session's files are unchanged, so after the first scan only new or changed sessions are read. The
-cache is a convenience: deleting it costs one rescan, and a corrupt or old one is ignored.
+session's files are unchanged and nothing in it was still unfinished when it was read, so after the
+first scan only new, changed or unfinished sessions are read. The cache is a convenience: deleting
+it costs one rescan, and a corrupt or old one is ignored.
 
 "Usual" is per agent type and model family (most agents are general-purpose, so the model is what
 tells them apart): this project's runs when there are at least MIN_RUNS, else every project's,
@@ -78,12 +79,19 @@ def _fingerprint(paths: locate.SessionPaths) -> List[List[Any]]:
     return out
 
 
+class SessionRows(list):
+    """One session's rows. `settled` is False while any agent in it was not finished when it was read:
+    whether an agent is running or cut off depends on the clock, so the cache must not keep the session."""
+    settled = True
+
+
 def rows_for(paths: locate.SessionPaths, now_fn: Callable[[], float] = time.time) -> List[Dict[str, Any]]:
     """Numbers for every finished agent of one session. An agent that was cut off (orphaned, or failed
     mid-call) has no end time: it is kept with seconds None, so the fail rate counts it."""
     run = RunBuilder(paths, now_fn=now_fn).refresh()
     project = project_key(paths.project_dir)
-    out = []
+    out = SessionRows()
+    out.settled = all(a.status in FINISHED for a in run.agents)
     for a in run.agents:
         if a.status not in FINISHED:
             continue
@@ -205,7 +213,9 @@ class Baselines:
                         rows = rows_for(paths)
                     except Exception:      # noqa: BLE001 - one unreadable session must not stop the scan
                         continue           # not cached: a session that failed is read again next scan
-                    fresh[info.session_id] = {"fp": fp, "rows": rows}
+                    # Unfinished agents change with the clock, not the files: such a session is read again.
+                    settled = getattr(rows, "settled", True)
+                    fresh[info.session_id] = {"fp": fp if settled else None, "rows": rows}
         except OSError as exc:
             with self._lock:
                 self.state, self.error = "error", "past runs unreadable: {}".format(exc)
