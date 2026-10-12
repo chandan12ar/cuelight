@@ -29,20 +29,22 @@ MAX_CALLS = 20_000
 MAX_API = 200
 MAX_TIMEOUTS = 200
 MAX_TEXT = 200
+TARGET_CUT = 160          # a stored target (a command, a path, a URL) keeps this many characters of its first line
 _ANSI = re.compile(r"\x1b\[[0-9;?]*[A-Za-z]")     # terminal colours in command output
 
 
 def _target(params: Any) -> Tuple[str, str]:
     """(what to show: the first line of the target, what makes two calls the same call). A file
-    tool is the same call on the same file, whatever the edit; a command is the same call only
-    when the whole command matches, so two different ``python - <<'EOF'`` scripts are not."""
+    tool is the same call on the same file, whatever the edit; a command or a URL is the same call
+    only when the whole value matches, so two different ``python - <<'EOF'`` scripts are not, and a URL
+    with a line break is not the URL its first line shows."""
     if not isinstance(params, dict):
         return "", ""
     for key in ("file_path", "notebook_path", "command", "path", "url", "pattern", "query", "description"):
         value = params.get(key)
         if isinstance(value, str) and value.strip():
-            shown = scrub(value.strip().splitlines()[0])[:160]
-            whole = value.strip() if key == "command" else shown
+            shown = scrub(value.strip().splitlines()[0])[:TARGET_CUT]
+            whole = value.strip() if key in ("command", "url") else shown
             return shown, hashlib.sha1(whole.encode("utf-8", "replace")).hexdigest()[:16]
     return "", ""
 

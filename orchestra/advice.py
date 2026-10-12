@@ -20,6 +20,7 @@ from orchestra import livestate
 from orchestra import pressure
 from orchestra import verify
 from orchestra import waste as waste_mod
+from orchestra.errors import TARGET_CUT
 from orchestra.redact import scrub
 from orchestra.runaway import detect_loop
 
@@ -369,7 +370,6 @@ TOP_LABEL = re.compile(r"[a-z]+")                              # a domain's last
 # What an allow rule for each tool says it reaches, shown on the card so no one reads it as narrower.
 SCOPE = {"Bash": "This allows any arguments, and runs code from your project (its tests or build scripts).",
          "WebFetch": "This allows any page on that domain."}
-ERROR_TARGET_CUT = 160    # the cut length of orchestra.errors targets: a stored target this long may be cut short
 PROMPTS_ENOUGH = 3
 
 
@@ -387,10 +387,11 @@ def safe_prefix(command: str) -> Optional[str]:
 
 
 def _is_whole(text: str, same: Any) -> bool:
-    """True when `text` is the whole command. Commands only: the error log keeps a command's first line
-    (cut at 160 characters) and a hash of the whole command, so the line is the whole only when that hash
-    is its own. A second line, a carriage return or a cut never matches. A URL's logged hash is of the
-    shown text itself, so it proves nothing and is not checked this way."""
+    """True when `text` is the whole command or URL. The error log keeps the first line of a command or
+    a URL (cut at TARGET_CUT characters) and a hash of the whole value, so the line is the whole only when
+    that hash is its own. A second line, a carriage return, a cut or a scrub that changed the text never
+    matches. Before the log hashed a URL's whole value it hashed the shown line, so this proved nothing
+    for URLs; now it holds for both."""
     return bool(text) and hashlib.sha1(text.encode("utf-8", "replace")).hexdigest()[:16] == same
 
 
@@ -399,7 +400,7 @@ def _host(url: str) -> str:
     a backslash or an "@" anywhere could make Python's parser and the fetch's disagree about the host, so
     no host is taken. An address, a single-label name, a .localhost name or a malformed label is not a
     domain to approve, and a URL the error log cut short may have lost the end of its host."""
-    if len(url) >= ERROR_TARGET_CUT:
+    if len(url) >= TARGET_CUT:
         return ""
     text = url.lower()
     m = None if ("\\" in text or "@" in text) else URL_HOST.match(text)
@@ -442,7 +443,7 @@ def _preapprove_cards(run: Any, now: float, table: Any) -> List[Dict[str, Any]]:
             host = _host(target)
             shown = host
             key = "preapprove:WebFetch:" + host
-            allow = "WebFetch(domain:{})".format(host) if host else None
+            allow = "WebFetch(domain:{})".format(host) if whole and host else None
         else:
             key = "preapprove:" + tool
         g = groups.setdefault(key, {"tool": tool, "shown": shown, "allow": allow, "seconds": 0.0, "prompts": 0,

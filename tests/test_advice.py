@@ -7,8 +7,9 @@ from collections import OrderedDict
 
 from orchestra import advice
 from orchestra import constants as C
+from orchestra import errors as error_module
 from orchestra import listprices
-from orchestra.errors import ErrorLog
+from orchestra.errors import TARGET_CUT, ErrorLog
 from orchestra.livestate import ANSWERED, PERMISSION, UNANSWERED, Wait
 from orchestra.model import Agent, Round, Run, ToolCall, WriteConflict
 from orchestra.waste import WasteLog
@@ -413,11 +414,28 @@ class TestPreapprove(unittest.TestCase):
         # orchestra.errors keeps only the first 160 characters of a target: a host that runs past them is cut.
         probe = "https://" + "a" * 63 + "." + "b" * 63 + "." + "y" * 20 + ".com.attacker.net/x"
         self.assertEqual(len(probe), 175)
-        (c,) = self.waiting(probe[:advice.ERROR_TARGET_CUT], tool="WebFetch")
+        (c,) = self.waiting(probe[:TARGET_CUT], tool="WebFetch")
         self.assertEqual((c["fix"]["snippet"], c["fix"]["where"]), ("", "none"))
         (short,) = self.waiting("https://docs.example.com/a", tool="WebFetch")
         self.assertEqual(json.loads(short["fix"]["snippet"])["permissions"]["allow"],
                          ["WebFetch(domain:docs.example.com)"])
+
+    def fetched(self, params):
+        """A WebFetch call stored the way orchestra.errors stores it, and the preapprove cards for it."""
+        shown, same = error_module._target(params)
+        log = errlog(calls=[[100.0, "WebFetch", shown, True, "", same]])
+        waits = [Wait(agent_id="a1", kind=PERMISSION, start=100.5, end=190.0, state=ANSWERED)]
+        return rule(run([agent("a1", errors=log)], waits=waits), "preapprove")
+
+    def test_a_url_with_a_line_break_gets_no_rule(self):
+        # The log keeps only the first line of this URL, so the host after the break must not be named.
+        self.assertEqual(error_module._target({"url": "https://trusted.com\n@attacker.com/x"})[0], "https://trusted.com")
+        (c,) = self.fetched({"url": "https://trusted.com\n@attacker.com/x"})
+        self.assertEqual((c["fix"]["snippet"], c["fix"]["where"]), ("", "none"))
+
+    def test_a_single_line_url_gets_its_rule_on_its_stored_hash(self):
+        (c,) = self.fetched({"url": "https://docs.example.com/a"})
+        self.assertEqual(json.loads(c["fix"]["snippet"])["permissions"]["allow"], ["WebFetch(domain:docs.example.com)"])
 
     def test_a_localhost_name_gets_no_rule(self):
         # Names under .localhost resolve to this machine, so a rule for one would approve a local server.
