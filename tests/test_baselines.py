@@ -4,6 +4,7 @@ import json
 import os
 import shutil
 import tempfile
+import time
 import unittest
 from unittest import mock
 
@@ -123,6 +124,25 @@ class TestScan(unittest.TestCase):
             s.start_if_stale()
         start.assert_not_called()
 
+    def test_a_cut_off_agent_is_kept_with_no_time(self):
+        paths = build_session(self.root, "s1")
+        two_hours_on = time.time() + 2 * 3600          # the session is no longer live: a3 is cut off
+        rows = baselines.rows_for(paths, now_fn=lambda: two_hours_on)
+        self.assertEqual(len(rows), 3)
+        self.assertEqual(sorted((r["status"], r["seconds"]) for r in rows if r["seconds"] is None),
+                         [("orphaned", None)])
+
+    def test_a_later_scan_error_keeps_the_numbers(self):
+        build_session(self.root, "s1")
+        s = self.store()
+        s.scan()
+        with mock.patch.object(baselines.os, "listdir", side_effect=PermissionError("denied")):
+            s.scan()
+        self.assertEqual(s.state, "error")
+        u = s.usual_for("general-purpose", "haiku-4-5", "", "")
+        self.assertEqual((u is not None, u["n"]), (True, 2))
+        self.assertEqual(len(s.summary("", "")["groups"]), 1)
+
     def test_a_session_that_failed_is_read_again_next_time(self):
         build_session(self.root, "s1")
         with mock.patch.object(baselines, "rows_for", side_effect=ValueError("unreadable")):
@@ -187,6 +207,23 @@ class TestUsual(unittest.TestCase):
         rows[1].update(edited=True, checked="unchecked")
         u = store_with(rows).usual_for("general-purpose", "sonnet-5", "/x/p", "")
         self.assertEqual((u["fail_rate"], u["unchecked_rate"]), (0.4, 0.5))
+
+    def test_cut_off_runs_count_toward_n_and_fail_rate_but_not_time(self):
+        rows = [row(seconds=float(v)) for v in (10, 20, 30, 40)] + [row(seconds=None, status="orphaned")]
+        u = store_with(rows).usual_for("general-purpose", "sonnet-5", "/x/p", "")
+        self.assertEqual((u["n"], u["fail_rate"], u["enough"]), (5, 0.2, True))
+        self.assertEqual((u["typical_s"], u["slow_s"]), (25.0, 40.0))
+
+    def test_a_group_with_no_timed_run_is_not_enough(self):
+        u = store_with([row(seconds=None, status="failed") for _ in range(5)]).usual_for(
+            "general-purpose", "sonnet-5", "/x/p", "")
+        self.assertEqual((u["enough"], u["n"]), (False, 5))
+
+    def test_a_failing_run_is_not_counted_as_unchecked(self):
+        rows = [row(edited=True, checked="checked"), row(edited=True, checked="failing"),
+                row(edited=True, checked="failing"), row(edited=True, checked="unchecked"), row()]
+        u = store_with(rows).usual_for("general-purpose", "sonnet-5", "/x/p", "")
+        self.assertEqual(u["unchecked_rate"], 0.25)
 
     def test_cost_is_priced_when_asked(self):
         u = store_with([row() for _ in range(5)]).usual_for("general-purpose", "sonnet-5", "/x/p", "",

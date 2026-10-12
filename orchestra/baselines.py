@@ -22,7 +22,7 @@ import statistics
 import tempfile
 import threading
 import time
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from orchestra import constants as C
 from orchestra import locate
@@ -33,8 +33,8 @@ from orchestra.spend import _short
 from orchestra.redact import scrub
 from orchestra.statedir import state_dir
 
-VERSION = 1
-CACHE_NAME = "baselines-v1.json"
+VERSION = 2               # 2: cut-off agents are rows too, so v1 caches are not reused
+CACHE_NAME = "baselines-v2.json"
 MIN_RUNS = 5
 RESCAN_S = 600.0          # a dashboard left open picks up new sessions this often
 MAX_GROUPS = 40
@@ -78,13 +78,14 @@ def _fingerprint(paths: locate.SessionPaths) -> List[List[Any]]:
     return out
 
 
-def rows_for(paths: locate.SessionPaths) -> List[Dict[str, Any]]:
-    """Numbers for every finished agent of one session."""
-    run = RunBuilder(paths).refresh()
+def rows_for(paths: locate.SessionPaths, now_fn: Callable[[], float] = time.time) -> List[Dict[str, Any]]:
+    """Numbers for every finished agent of one session. An agent that was cut off (orphaned, or failed
+    mid-call) has no end time: it is kept with seconds None, so the fail rate counts it."""
+    run = RunBuilder(paths, now_fn=now_fn).refresh()
     project = project_key(paths.project_dir)
     out = []
     for a in run.agents:
-        if a.status not in FINISHED or a.duration_s is None:
+        if a.status not in FINISHED:
             continue
         out.append({"session": paths.session_id, "project": project, "type": _name(a.agent_type) or "?",
                     "model": _name(_short(a.model)), "status": a.status, "start": a.started_at,
@@ -101,11 +102,18 @@ def _p90(values: List[float]) -> float:
     return ordered[max(0, math.ceil(0.9 * len(ordered)) - 1)]
 
 
+def _enough(rows: List[Dict[str, Any]]) -> bool:
+    """Enough to quote: MIN_RUNS runs, and at least one of them timed (a group of cut-off runs has no time)."""
+    return len(rows) >= MIN_RUNS and any(r["seconds"] is not None for r in rows)
+
+
 def _summarize(rows: List[Dict[str, Any]], scope: str, table: Any) -> Dict[str, Any]:
-    seconds = [r["seconds"] for r in rows]
-    fresh = [_fresh(r["tokens"]) for r in rows]
+    # Runs and the fail rate count every run; time, tokens and cost come from the timed runs only.
+    timed = [r for r in rows if r["seconds"] is not None]
+    seconds = [r["seconds"] for r in timed]
+    fresh = [_fresh(r["tokens"]) for r in timed]
     # A run whose model has no price is left out of the cost figures, not counted as free.
-    priced = [table.cost(r["tokens"]) for r in rows] if table is not None else []
+    priced = [table.cost(r["tokens"]) for r in timed] if table is not None else []
     costs = [cost for cost, unpriced in priced if not unpriced]
     edited = [r for r in rows if r["edited"]]
     return {"type": rows[0]["type"], "model": rows[0]["model"], "scope": scope, "n": len(rows), "enough": True,
@@ -114,7 +122,8 @@ def _summarize(rows: List[Dict[str, Any]], scope: str, table: Any) -> Dict[str, 
             "typical_cost": statistics.median(costs) if costs else None,
             "slow_cost": _p90(costs) if costs else None,
             "fail_rate": sum(1 for r in rows if r["status"] != C.COMPLETED) / len(rows),
-            "unchecked_rate": (sum(1 for r in edited if r["checked"] != "checked") / len(edited)) if edited else None}
+            # Only "unchecked" is a skipped check; "failing" means the tests ran and failed.
+            "unchecked_rate": (sum(1 for r in edited if r["checked"] == "unchecked") / len(edited)) if edited else None}
 
 
 class Baselines:
@@ -129,6 +138,7 @@ class Baselines:
         self._rows: List[Dict[str, Any]] = []
         self._thread: Optional[threading.Thread] = None
         self._scanned_at = 0.0
+        self._installed = False   # set once a scan has installed rows; a later error keeps them
         self.state = "idle"       # idle | scanning | ready | error
         self.error = ""
 
@@ -168,6 +178,7 @@ class Baselines:
         rows = [r for entry in sessions.values() for r in entry.get("rows", [])]
         with self._lock:
             self._sessions, self._rows = sessions, rows
+            self._installed = True
             self.state, self.error = "ready", ""
             self._scanned_at = time.time()
 
@@ -223,9 +234,9 @@ class Baselines:
 
     def _group(self, rows: List[Dict[str, Any]], project: str, table: Any) -> Dict[str, Any]:
         mine = [r for r in rows if r["project"] == project] if project else []
-        if len(mine) >= MIN_RUNS:
+        if _enough(mine):
             return _summarize(mine, "project", table)
-        if len(rows) >= MIN_RUNS:
+        if _enough(rows):
             return _summarize(rows, "all", table)
         first = rows[0] if rows else {}
         return {"type": first.get("type", ""), "model": first.get("model", ""), "scope": "none", "n": len(rows),
@@ -233,8 +244,9 @@ class Baselines:
 
     def usual_for(self, agent_type: str, model: str, project_dir: str, exclude_session: str,
                   table: Any = None) -> Optional[Dict[str, Any]]:
-        """What this kind of agent usually takes, or None before the first scan has finished."""
-        if self.state != "ready":
+        """What this kind of agent usually takes, or None before the first successful scan. A later scan
+        that fails keeps the numbers it already has."""
+        if not self._installed:
             return None
         kind, family = _name(agent_type) or "?", _name(_short(model))
         same = [r for r in self.rows() if r["type"] == kind and r["model"] == family and r["session"] != exclude_session]
