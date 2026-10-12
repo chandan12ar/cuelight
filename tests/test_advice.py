@@ -232,6 +232,47 @@ class TestSureRules(unittest.TestCase):
         self.assertIn("CLAUDE.md", c["happened"])
         self.assertIn("omitClaudeMd", c["fix"]["text"])
 
+    def test_a_failed_or_cut_off_agent_gets_no_verify_card(self):
+        out = cards(run([agent("a1", status=C.FAILED, verification=unchecked()),
+                         agent("a2", status=C.ORPHANED, verification=unchecked())]))
+        self.assertEqual([c for c in out if c["rule"] == "verify"], [])
+        self.assertEqual(sorted(a for c in out if c["rule"] == "failure" for a in c["agents"]), ["a1", "a2"])
+
+    def test_two_failing_checks_name_their_own_commands(self):
+        a1 = agent("a1", verification=dict(unchecked(), state="failing",
+                                           last_check={"tool": "Bash", "target": "npm test", "at": 60.0}))
+        a2 = agent("a2", verification=dict(unchecked(), state="failing",
+                                           last_check={"tool": "Bash", "target": "pytest -q", "at": 61.0}))
+        out = rule(run([a1, a2]), "verify")
+        self.assertEqual(len(out), 2)
+        got = {c["fix"]["snippet"].split("`")[1]: c["agents"] for c in out}
+        self.assertEqual(got, {"npm test": ["a1"], "pytest -q": ["a2"]})
+
+    def test_a_command_in_a_snippet_is_its_first_line_only(self):
+        other = agent("a2", tool_calls=[ToolCall(name="Bash", target="pytest -q\nmore", timestamp=10.0, ok=True,
+                                                 verify="check")])
+        (c,) = rule(run([agent(verification=unchecked()), other]), "verify")
+        self.assertIn("run `pytest -q`", c["fix"]["snippet"])
+
+    def test_a_cut_off_command_is_not_put_in_a_snippet(self):
+        for cut in ("npm test ...", "npm test\u2026"):
+            other = agent("a2", tool_calls=[ToolCall(name="Bash", target=cut, timestamp=10.0, ok=True,
+                                                     verify="check")])
+            (c,) = rule(run([agent(verification=unchecked()), other]), "verify")
+            self.assertIn("the project's tests", c["fix"]["snippet"])
+            self.assertNotIn("`", c["fix"]["snippet"])
+        v = dict(unchecked(), state="failing", last_check={"tool": "Bash", "target": "npm test ...", "at": 60.0})
+        (c,) = rule(run([agent(verification=v)]), "verify")
+        self.assertIn("the project's tests", c["fix"]["snippet"])
+
+    def test_a_table_that_prices_no_rebuilt_model_gives_no_cost(self):
+        log = WasteLog()
+        log.calls = OrderedDict([("m1", [0.0, "claude-unlisted-1", 50_000, 0, 10, 10]),
+                                 ("m2", [4000.0, "claude-unlisted-1", 200_000, 0, 10, 10])])
+        (c,) = rule(run([], main_waste=log), "compact", table=listprices.table())
+        self.assertEqual(c["impact"]["tokens"], 200_000)
+        self.assertIsNone(c["impact"]["cost"])
+
 
 class TestCardShape(unittest.TestCase):
     def test_every_card_has_what_the_ui_reads_and_ascii_text(self):

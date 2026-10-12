@@ -250,12 +250,20 @@ def _seen_check(run: Any) -> str:
     return scrub(best.target)[:120] if best is not None else ""
 
 
+def _exact_command(text: str) -> str:
+    """A command as a snippet may show it: its first line, or "" when that line is cut off."""
+    lines = text.strip().splitlines()
+    line = lines[0].strip() if lines else ""
+    return "" if line.endswith(("...", "\u2026")) else line
+
+
 def _verify_cards(run: Any, now: float, table: Any) -> List[Dict[str, Any]]:
     out: List[Dict[str, Any]] = []
     seen: Optional[str] = None
     for agent in run.agents:
         v = agent.verification
-        if not v or not v.get("final") or v.get("state") not in (verify.UNCHECKED, verify.FAILING):
+        if agent.status != C.COMPLETED or not v or not v.get("final") \
+                or v.get("state") not in (verify.UNCHECKED, verify.FAILING):
             continue
         if seen is None:
             seen = _seen_check(run)
@@ -264,16 +272,18 @@ def _verify_cards(run: Any, now: float, table: Any) -> List[Dict[str, Any]]:
             last = scrub((v.get("last_check") or {}).get("target") or "")[:120]
             title, many = "Finished with its checks failing", "{n} agents finished with their checks failing"
             happened = "{}'s last check, {}, failed.".format(label, last or "a check")
-            command = last or seen
+            command = _exact_command(last or seen)
+            key = "verify:failing:" + command
         else:
             edited = scrub((v.get("last_edit") or {}).get("target") or "")[:120] or "code"
             title, many = ("Reported done without running the tests",
                            "{n} agents reported done without running the tests")
             happened = "{} edited {} and ran no test, build or lint after it.".format(label, edited)
-            command = seen
+            command = _exact_command(seen)
+            key = "verify:" + v["state"]
         snippet = "Before you report done, run {} and include its result. If it fails, fix it or say so.".format(
             "`" + command + "`" if command else "the project's tests")
-        out.append(_card("verify:" + v["state"], "verify", "sure", "fix", title, happened, [agent.agent_id],
+        out.append(_card(key, "verify", "sure", "fix", title, happened, [agent.agent_id],
                          "instructions", "Add this to the agent's instructions (its brief, or its definition "
                                          "in .claude/agents/):", snippet,
                          seconds=agent.duration_s or 0.0, tokens=_fresh(agent.tokens), cost=agent.cost,
@@ -299,6 +309,7 @@ def _compact_cards(run: Any, now: float, table: Any) -> List[Dict[str, Any]]:
     sources = [("", run.main_waste)] + [(a.agent_id, a.waste) for a in run.agents]
     count = tokens = 0
     longest, extra = 0.0, 0.0
+    priced = False
     agents: List[str] = []
     for agent_id, log in sources:
         if log is None:
@@ -314,6 +325,7 @@ def _compact_cards(run: Any, now: float, table: Any) -> List[Dict[str, Any]]:
             prices = table.price_for(r["model"]) if table is not None else None
             if prices is not None:
                 extra += r["tokens"] * max(0.0, prices["cache_create"] - prices["cache_read"]) / 1_000_000
+                priced = True
     if not count:
         return []
     return [_card("compact", "compact", "sure", "fix", "The cache was rebuilt after a break",
@@ -321,7 +333,7 @@ def _compact_cards(run: Any, now: float, table: Any) -> List[Dict[str, Any]]:
                   "again.".format(_plural(count, "break"), fmt_duration(longest), fmt_count(tokens)),
                   agents, "habit", "Before a break of more than a few minutes, run /compact so less has to be "
                                    "written again; if you won't need the old context, /clear instead.",
-                  tokens=tokens, cost=extra if table is not None else None, label="extra cache writes")]
+                  tokens=tokens, cost=extra if priced else None, label="extra cache writes")]
 
 
 def _rules_missing_cards(run: Any, now: float, table: Any) -> List[Dict[str, Any]]:
