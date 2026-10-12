@@ -8,7 +8,7 @@ import glob
 import os
 import threading
 import time
-from typing import Callable, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional
 
 from orchestra import constants as C
 from orchestra.agentlog import ActivityTimes, AgentDigest, TokenTally
@@ -43,9 +43,12 @@ class RunBuilder:
     def __init__(self, paths: SessionPaths,
                  now_fn: Callable[[], float] = time.time,
                  spool: Optional[EventSpool] = None,
-                 prices: Optional[PriceSource] = None) -> None:
+                 prices: Optional[PriceSource] = None,
+                 baselines: Any = None) -> None:
         self.paths = paths
         self.now_fn = now_fn
+        # What each kind of agent usually takes, from past sessions (orchestra.baselines), or None.
+        self._baselines = baselines
         # Hook events, when a spool is given. Without one the run is built from
         # transcripts alone, exactly as before.
         self._spool = spool
@@ -113,6 +116,15 @@ class RunBuilder:
                   for agent_id in sorted(self._agent_ids())]
         self._apply_waits(agents, waits)
         agents.sort(key=lambda a: (a.started_at is None, a.started_at or 0))
+        if self._baselines is not None:
+            # Asked once per kind of agent, not per agent: a run has many of the same kind.
+            seen: Dict[tuple, Optional[dict]] = {}
+            for a in agents:
+                key = (a.agent_type, a.model)
+                if key not in seen:
+                    seen[key] = self._baselines.usual_for(a.agent_type, a.model, self.paths.project_dir,
+                                                          self.paths.session_id, self._table)
+                a.usual = seen[key]
 
         edges, hubs, conflicts = infer_edges(agents, self._handoffs)
         starts = [a.started_at for a in agents if a.started_at is not None]

@@ -149,8 +149,25 @@ def cmd_advise(args) -> int:
     if paths is None:
         print("no transcript found for session: {}".format(session_id or "(none)"))
         return 2
-    run = RunBuilder(paths, spool=_make_spool(), prices=default_source()).refresh()
+    from orchestra.baselines import Baselines
+    past = Baselines()
+    past.scan()
+    run = RunBuilder(paths, spool=_make_spool(), prices=default_source(), baselines=past).refresh()
     _print_safe(advice.render_text(run))
+    return 0
+
+
+def cmd_estimate(args) -> int:
+    from orchestra import baselines as baselines_mod
+    from orchestra.locate import find_project_dir, find_session
+    from orchestra.pricing import default_source
+
+    session_id = _resolve_session(args)
+    paths = find_session(session_id) if session_id else None
+    project_dir = paths.project_dir if paths else (find_project_dir(args.cwd or os.getcwd()) or "")
+    past = baselines_mod.Baselines()
+    past.scan()
+    _print_safe(baselines_mod.render_estimate(past.summary(project_dir, session_id, default_source().get())))
     return 0
 
 
@@ -165,9 +182,12 @@ def cmd_serve(args) -> int:
     from orchestra.pricing import default_source
     # History persists data after the session is gone, so it is opt-in only.
     store = history_mod.HistoryStore() if history_mod.enabled() else None
+    from orchestra.baselines import Baselines
+    past = Baselines()
+    past.start()           # reads past sessions in the background; the dashboard opens at once
     service = OrchestraService(token=token, default_session=session_id,
                                spool_factory=_make_spool, prices=default_source(),
-                               history=store)
+                               history=store, baselines=past)
 
     port = args.port
     server = None
@@ -380,6 +400,8 @@ def main(argv: Optional[List[str]] = None) -> int:
     parser.add_argument("--out", default="", help="file or directory for --export")
     parser.add_argument("--advise", action="store_true",
                         help="print what to change next time: the run's verdict, fix-it cards and a fact sheet")
+    parser.add_argument("--estimate", action="store_true",
+                        help="print what each kind of agent usually takes, from your past sessions")
     args = parser.parse_args(argv)
 
     if args.demo:
@@ -390,6 +412,8 @@ def main(argv: Optional[List[str]] = None) -> int:
         return cmd_stop(args)
     if args.advise:
         return cmd_advise(args)
+    if args.estimate:
+        return cmd_estimate(args)
     if args.report is not None:
         return cmd_report(args)
     if args.export:

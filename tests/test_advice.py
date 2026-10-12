@@ -648,5 +648,49 @@ class TestAdviseCommand(unittest.TestCase):
         self.assertIn("Fix (a habit):", text)
 
 
+def usual(**kw):
+    base = {"type": "general-purpose", "model": "sonnet-5", "scope": "project", "n": 54, "enough": True,
+            "typical_s": 180.0, "slow_s": 400.0, "typical_tokens": 76_000, "slow_tokens": 150_000,
+            "typical_cost": 0.30, "slow_cost": 0.80, "fail_rate": 0.07, "unchecked_rate": 0.2}
+    base.update(kw)
+    return base
+
+
+class TestOverUsual(unittest.TestCase):
+    def test_a_finished_agent_far_over_its_usual_time(self):
+        (c,) = rule(run([agent(start=0.0, end=900.0, usual=usual())]), "over_usual")
+        self.assertIn("5.0x", c["happened"])
+        self.assertIn("54 runs", c["happened"])
+        self.assertAlmostEqual(c["impact"]["seconds"], 720.0)
+        self.assertIn("No other card explains it", c["fix"]["text"])
+
+    def test_it_points_to_the_other_cards_on_that_agent(self):
+        a = agent(start=0.0, end=900.0, usual=usual(), verification=unchecked())
+        (c,) = rule(run([a]), "over_usual")
+        self.assertIn("Reported done without running the tests", c["fix"]["text"])
+
+    def test_within_usual_or_not_enough_runs(self):
+        self.assertEqual(rule(run([agent(start=0.0, end=390.0, usual=usual())]), "over_usual"), [])
+        self.assertEqual(rule(run([agent(start=0.0, end=900.0, usual=usual(enough=False, n=3))]), "over_usual"), [])
+
+    def test_a_usual_time_of_zero_gives_no_ratio_and_no_crash(self):
+        quick = usual(typical_s=0.0, slow_s=0.0)
+        self.assertEqual(rule(run([agent(start=0.0, end=900.0, usual=quick)]), "over_usual"), [])
+
+    def test_a_finished_agent_far_over_its_usual_cost(self):
+        a = agent(start=0.0, end=100.0, usual=usual(), tokens={"input": 5000, "output": 2000}, cost=1.20)
+        (c,) = rule(run([a]), "over_usual")
+        self.assertEqual(c["title"], "Cost far more than usual")
+        self.assertIn("4.0x the usual $0.30", c["happened"])
+        self.assertAlmostEqual(c["impact"]["cost"], 0.90)
+
+    def test_a_running_agent_far_over_usual_goes_to_the_health_box(self):
+        a = agent(status=C.RUNNING, start=0.0, end=None, usual=usual())
+        out = advice.compute(run([a]), 1000.0)
+        self.assertEqual(out["slow"], [{"agent_id": "a1", "elapsed_s": 1000.0, "typical_s": 180.0, "slow_s": 400.0,
+                                        "n": 54, "kind": "general-purpose on sonnet-5"}])
+        self.assertEqual([c for c in out["cards"] if c["rule"] == "over_usual"], [])
+
+
 if __name__ == "__main__":
     unittest.main()

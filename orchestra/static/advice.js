@@ -97,9 +97,10 @@ async function copyAdviceText(text, btn) {
 function renderAdvice(run) {
   const box = $("advice");
   if (!box) return;
+  if (state.usual === undefined && !state.offline) loadUsual();     // opened straight from a link
   const spot = noteFocus(box);
   const a = run.advice;
-  box.innerHTML = adviceHtml(run, adviceHidden(), !!state.adviceShowHidden);
+  box.innerHTML = adviceHtml(run, adviceHidden(), !!state.adviceShowHidden) + adviceUsualHtml(state.usual);
   for (const el of box.querySelectorAll("[data-agent]")) el.onclick = () => openDrawer(el.getAttribute("data-agent"));
   for (const btn of box.querySelectorAll("[data-copy]")) {
     btn.onclick = () => {
@@ -133,4 +134,60 @@ function renderAdviceBadge(run) {
   badge.hidden = !cards.length;
   badge.textContent = String(cards.length);
   if (badge.classList) badge.classList.toggle("badge-fail", cards.some((c) => c.severity === "failure"));
+}
+
+// "Your usual": what each kind of agent takes, from past sessions (orchestra/baselines.py, /api/usual).
+function usualText(u, seconds) {
+  if (!u) return "";
+  if (!u.enough) return "not enough past runs yet (" + u.n + ")";
+  const where = u.scope === "project" ? "this project" : "all your projects";
+  let text = fmtDuration(u.typical_s) + " typical, " + fmtDuration(u.slow_s) + " slow case, " +
+    fmtCount(u.typical_tokens) + " tokens, fails " + Math.round(u.fail_rate * 100) + "% (" + u.n + " runs, " + where + ")";
+  if (seconds && u.typical_s) text += ". This one: " + fmtDuration(seconds) + ", " + (seconds / u.typical_s).toFixed(1) + "x";
+  return text;
+}
+
+function adviceUsualHtml(usual) {
+  if (state.offline) return "";
+  const head = '<section class="advice-usual"><h3>Your usual</h3>';
+  if (!usual) return head + '<p class="advice-note">Loading your past runs\u2026</p></section>';
+  if (usual.state === "off") return "";
+  if (usual.state === "error") return head + '<p class="advice-note">' + esc(usual.error || "Could not read your past runs.") + "</p></section>";
+  const groups = usual.groups || [];
+  if (!groups.length) {
+    return head + '<p class="advice-note">' + (usual.state === "scanning" ? "Learning from your past runs\u2026"
+      : "No finished agents in your past sessions yet. Cuelight learns what each kind of agent usually takes from them.") +
+      "</p></section>";
+  }
+  const enough = groups.filter((g) => g.enough);
+  const few = groups.filter((g) => !g.enough);
+  const price = usual.source === "list" ? " Costs: list price, as of " + usual.as_of + "." : "";
+  let html = head + '<p class="advice-note">' + esc("From " + plural(usual.sessions, "past session", "past sessions") +
+    ". Typical is the middle run; slow case is the 90th percentile." + price) + "</p>";
+  if (enough.length) {
+    const num = (v) => '<td class="num">' + esc(v) + "</td>";
+    html += '<div class="advice-usual-wrap"><table><thead><tr><th scope="col">Agent type</th><th scope="col">Model</th>' +
+      '<th scope="col">Runs</th><th scope="col">Typical</th><th scope="col">Slow case</th><th scope="col">Tokens</th>' +
+      '<th scope="col">Cost</th><th scope="col">Fails</th><th scope="col">From</th></tr></thead><tbody>' +
+      enough.map((g) => "<tr><td>" + esc(g.type) + "</td><td>" + esc(g.model) + "</td>" + num(String(g.n)) +
+        num(fmtDuration(g.typical_s)) + num(fmtDuration(g.slow_s)) + num(fmtCount(g.typical_tokens)) +
+        num(g.typical_cost === null || g.typical_cost === undefined ? "\u2014" : fmtMoney(g.typical_cost, usual.currency)) +
+        num(Math.round(g.fail_rate * 100) + "%") + "<td>" + (g.scope === "project" ? "this project" : "all projects") +
+        "</td></tr>").join("") + "</tbody></table></div>";
+  }
+  if (few.length) {
+    html += '<p class="advice-note">' + esc("Not enough past runs yet (fewer than 5): " +
+      few.slice(0, 12).map((g) => g.type + " on " + g.model + " (" + g.n + ")").join(", ")) + "</p>";
+  }
+  return html + "</section>";
+}
+
+async function loadUsual() {
+  if (state.offline || state.usualLoading) return;
+  state.usualLoading = true;
+  try { state.usual = await api("/api/usual"); }
+  catch (err) { state.usual = { state: "error", error: "Could not load your usual numbers.", groups: [] }; }
+  finally { state.usualLoading = false; }
+  if (state.view === "advice" && state.run) renderAdvice(state.run);
+  if (state.usual && state.usual.state === "scanning" && state.view === "advice") setTimeout(loadUsual, 3000);
 }

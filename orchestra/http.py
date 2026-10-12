@@ -162,6 +162,8 @@ def make_handler(service: OrchestraService, state: Dict[str, Any]):
                                                   query.get("failed", [""])[0] == "1", session))
                 elif path == "/api/fleet":
                     self._json(200, service.fleet())
+                elif path == "/api/usual":
+                    self._json(200, service.usual(session))
                 elif path == "/api/stream":
                     self._stream(session)
                 else:

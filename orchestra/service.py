@@ -29,7 +29,8 @@ class OrchestraService:
                  max_builders: int = C.MAX_BUILDERS,
                  spool_factory: Optional[Callable[[], Optional[EventSpool]]] = None,
                  prices: Optional[PriceSource] = None,
-                 history: Optional[HistoryStore] = None) -> None:
+                 history: Optional[HistoryStore] = None,
+                 baselines: Any = None) -> None:
         self.root = root
         self.token = token
         self.default_session = default_session
@@ -40,6 +41,7 @@ class OrchestraService:
         self.spool_factory = spool_factory
         self.prices = prices
         self.history = history        # None unless the user opted in
+        self.baselines = baselines    # what each kind of agent usually takes (orchestra.baselines), or None
         self.max_builders = max(1, max_builders)
         # Least recently used first. Each builder holds every agent's digest, so
         # an unbounded dict grows with every session the picker ever visits.
@@ -58,7 +60,7 @@ class OrchestraService:
                 raise NotFound("unknown session: {}".format(session_id))
             spool = self.spool_factory() if self.spool_factory else None
             builder = RunBuilder(paths, now_fn=self.now_fn, spool=spool,
-                                 prices=self.prices)
+                                 prices=self.prices, baselines=self.baselines)
             self._builders[session_id] = builder
             self._evict()
             return builder
@@ -191,6 +193,16 @@ class OrchestraService:
     def calls(self, query: str, failed_only: bool = False, session_id: str = "") -> Dict[str, Any]:
         """The Activity tab's search over every tool call in the run."""
         return search_mod.calls(self._builder(session_id).refresh(), query, failed_only)
+
+    def usual(self, session_id: str = "") -> Dict[str, Any]:
+        """What each kind of agent usually takes (orchestra.baselines), for the Advice tab."""
+        if self.baselines is None:
+            return {"state": "off", "error": "", "sessions": 0, "agents": 0, "groups": []}
+        builder = self._builder(session_id)
+        table = self.prices.get() if self.prices is not None else None
+        answer = self.baselines.summary(builder.paths.project_dir, builder.paths.session_id, table)
+        self.baselines.start_if_stale()      # after answering: a rescan swaps its rows in when done
+        return answer
 
     def history_list(self, limit: int = 50) -> Dict[str, Any]:
         if self.history is None:

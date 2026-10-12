@@ -6,7 +6,8 @@ import unittest
 from tests import test_insights_ui as ui
 
 FNS = ("esc", "fmtDuration", "fmtCount", "fmtMoney", "plural", "priceNote", "adviceHidden", "setAdviceHidden",
-       "adviceImpact", "adviceAgents", "adviceCardHtml", "adviceHtml", "renderAdviceBadge")
+       "adviceImpact", "adviceAgents", "adviceCardHtml", "adviceHtml", "renderAdviceBadge",
+       "usualText", "adviceUsualHtml")
 CONSTS = ("ADVICE_HIDDEN_KEY", "ADVICE_WHERE")
 STORAGE = ("global.localStorage = {data: {}, getItem(k) { return k in this.data ? this.data[k] : null; },"
            " setItem(k, v) { this.data[k] = String(v); }};\n")
@@ -92,3 +93,66 @@ class TestAdviceTab(unittest.TestCase):
                 % json.dumps(s))
         hidden, text, cls = ui.run_js(FNS, CONSTS, body)
         self.assertEqual((hidden, text, cls), (False, "1", {"badge-fail": True}))
+
+
+@unittest.skipIf(ui.NODE is None, "node is not on PATH")
+class TestUsualUi(unittest.TestCase):
+    USUAL = {"state": "ready", "error": "", "sessions": 12, "agents": 60, "source": "list", "as_of": "2026-10-12",
+             "currency": "USD", "groups": [
+                 {"type": "general-purpose", "model": "sonnet-5", "scope": "project", "n": 54, "enough": True,
+                  "typical_s": 180, "slow_s": 540, "typical_tokens": 76000, "slow_tokens": 150000,
+                  "typical_cost": 0.31, "slow_cost": 0.9, "fail_rate": 0.07, "unchecked_rate": 0.2},
+                 {"type": "Explore", "model": "haiku-4-5", "scope": "none", "n": 2, "enough": False}]}
+
+    def usual_html(self, usual, offline=False):
+        body = "state.offline = %s; console.log(JSON.stringify(adviceUsualHtml(%s)));" % (
+            "true" if offline else "false", json.dumps(usual))
+        return ui.run_js(FNS, CONSTS, body)
+
+    def test_the_table_and_the_not_enough_line(self):
+        html = self.usual_html(self.USUAL)
+        self.assertIn("<td>general-purpose</td><td>sonnet-5</td>", html)
+        self.assertIn("this project", html)
+        self.assertIn("Explore on haiku-4-5 (2)", html)
+        self.assertIn("list price, as of 2026-10-12", html)
+
+    def test_states(self):
+        self.assertIn("Learning from your past runs", self.usual_html({"state": "scanning", "groups": []}))
+        self.assertIn("No finished agents", self.usual_html({"state": "ready", "groups": [], "sessions": 0}))
+        self.assertEqual(self.usual_html(self.USUAL, offline=True), "")
+
+    def test_usual_text_for_the_agent_panel(self):
+        u = self.USUAL["groups"][0]
+        text = ui.run_js(FNS, CONSTS, "console.log(JSON.stringify(usualText(%s, 540)));" % json.dumps(u))
+        self.assertIn("3m 00s typical", text)
+        self.assertIn("This one: 9m 00s, 3.0x", text)
+        few = ui.run_js(FNS, CONSTS, "console.log(JSON.stringify(usualText(%s, 10)));" % json.dumps(self.USUAL["groups"][1]))
+        self.assertEqual(few, "not enough past runs yet (2)")
+
+    def health(self, run_):
+        """renderHealth in Node: the items it lists, and what clicking each opens."""
+        body = """
+const opened = [];
+function openDrawer(id) { opened.push("drawer:" + id); }
+function openCard(name) { opened.push("card:" + name); }
+function loopText(loop) { return "a loop"; }
+global.document = {createElement: () => ({children: [], attrs: {}, textContent: "",
+  setAttribute(k, v) { this.attrs[k] = v; }, appendChild(c) { this.children.push(c); }})};
+box.appendChild = (c) => { box.list = c; };
+renderHealth(%s);
+const items = box.list ? box.list.children : [];
+items.forEach((i) => i.onclick());
+console.log(JSON.stringify({items: items.map((i) => [i.textContent, i.attrs["data-kind"]]), opened: opened}));
+""" % json.dumps(run_)
+        return ui.run_js(("esc", "fmtDuration", "fmtCount", "fmtPct", "callText", "renderHealth"), [], body)
+
+    def test_the_health_box_names_a_slow_running_agent(self):
+        slow = [{"agent_id": "a1", "elapsed_s": 460, "typical_s": 192, "slow_s": 270, "n": 24,
+                 "kind": "general-purpose on sonnet-5"}]
+        run_ = {"agents": [{"agent_id": "a1", "description": "Build the UI", "status": "running"}],
+                "insights": None, "advice": {"slow": slow}}
+        out = self.health(run_)
+        self.assertEqual(out["items"], [["SLOWER THAN USUAL — Build the UI: 7m 40s, usually 3m 12s", "slow"]])
+        self.assertEqual(out["opened"], ["drawer:a1"])
+        # A replay shows an earlier moment: the list is for now, so it stays out.
+        self.assertEqual(self.health(dict(run_, replay_at=100))["items"], [])

@@ -1,14 +1,19 @@
 """Usual numbers per kind of agent, learned from past sessions (orchestra.baselines)."""
 
+import io
 import json
 import os
 import shutil
 import tempfile
 import time
 import unittest
+from contextlib import redirect_stdout
 from unittest import mock
 
 from orchestra import baselines, listprices, locate
+from orchestra.__main__ import main
+from orchestra.build import RunBuilder
+from orchestra.service import OrchestraService
 from tests import fake_secrets as fake
 from tests.fixtures import build_session
 
@@ -274,6 +279,44 @@ class TestUsual(unittest.TestCase):
         self.assertIn("Not enough past runs yet", text)
         self.assertIn("list prices as of " + listprices.AS_OF, text)
         text.encode("ascii")
+
+
+class Stub:
+    def __init__(self):
+        self.asked = []
+
+    def usual_for(self, agent_type, model, project_dir, exclude_session, table=None):
+        self.asked.append((agent_type, model, exclude_session))
+        return {"type": agent_type, "model": "m", "scope": "all", "n": 7, "enough": False}
+
+
+class TestWiring(unittest.TestCase):
+    def setUp(self):
+        self.root = tempfile.mkdtemp()
+        self.paths = build_session(self.root, "s1")
+
+    def test_the_builder_attaches_usual_once_per_kind(self):
+        stub = Stub()
+        summary = RunBuilder(self.paths, baselines=stub).refresh().to_summary_dict()
+        self.assertEqual(summary["agents"][0]["usual"]["n"], 7)
+        self.assertEqual(len(stub.asked), len(set(stub.asked)))
+        self.assertTrue(all(s == "s1" for _, _, s in stub.asked))
+
+    def test_the_service_answers_usual(self):
+        store = store_with([row() for _ in range(5)])
+        svc = OrchestraService(root=self.root, default_session="s1", baselines=store)
+        self.assertEqual(svc.usual("s1")["groups"][0]["n"], 5)
+        self.assertEqual(OrchestraService(root=self.root, default_session="s1").usual("s1")["state"], "off")
+
+    def test_estimate_command(self):
+        for key, value in (("CLAUDE_CONFIG_DIR", self.root), ("ORCHESTRA_STATE_DIR", tempfile.mkdtemp()),
+                           ("ORCHESTRA_PRICES", "off")):
+            os.environ[key] = value
+            self.addCleanup(os.environ.pop, key, None)
+        out = io.StringIO()
+        with redirect_stdout(out):
+            self.assertEqual(main(["--session", "s1", "--estimate"]), 0)
+        self.assertIn("No past runs yet", out.getvalue())      # s1 itself is left out
 
 
 if __name__ == "__main__":

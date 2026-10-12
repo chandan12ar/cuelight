@@ -1,6 +1,6 @@
 ---
 description: Open the Cuelight dashboard for this session's subagents
-argument-hint: "[stop | report [path] | advise]"
+argument-hint: "[stop | report [path] | advise | estimate]"
 ---
 
 Run Cuelight for the current Claude Code session.
@@ -30,6 +30,11 @@ Dispatch on `$ARGUMENTS`:
   ```bash
   cuelight --advise
   ```
+- **`estimate`** — what each kind of agent usually takes (time, tokens, cost, how often it
+  fails), from your past sessions, to check before launching agents:
+  ```bash
+  cuelight --estimate
+  ```
 
 If the shell says `cuelight` is not found (an older Claude Code), run the same
 action as `python "${CLAUDE_PLUGIN_ROOT}/orchestra/__main__.py"` followed by the
@@ -39,7 +44,7 @@ Report back to the user exactly what the command printed — the URL, the report
 path, or the failure text. Do not paraphrase a failure as success, and do not
 retry a failed start more than once.
 
-For `advise`, show the user what it printed, keeping each fix's snippet exactly as written.
+For `advise` and `estimate`, show the user what it printed, keeping each fix's snippet exactly as written.
 Do not change any file because of it unless the user asks you to; if they do, make the change
 with your normal tools so they approve it as usual.
 

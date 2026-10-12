@@ -1079,3 +1079,11 @@ button.advice-agent { cursor: pointer; }
 .advice-show-hidden { justify-self: start; }
 .advice-note { color: var(--muted); }
 .badge.badge-fail { background: var(--failed); }
+.advice-usual { min-width: 0; }      /* a grid item: without it the table's width stretches the whole page on a phone */
+.advice-usual h3 { margin: 4px 0 6px; font-size: 15px; color: var(--ink); }
+.advice-usual-wrap { overflow-x: auto; }
+.advice-usual table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.advice-usual th, .advice-usual td { text-align: left; padding: 4px 8px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+.advice-usual td.num { text-align: right; font-variant-numeric: tabular-nums; }
+.advice-usual th:nth-child(n+3):nth-child(-n+8) { text-align: right; }      /* the number columns' headings sit over their numbers */
+.health li[data-kind="slow"]::before { background: var(--stalled); }

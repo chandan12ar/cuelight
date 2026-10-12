@@ -138,9 +138,11 @@ def _finish(card: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def _select(cards: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-    """Merged, filtered, ordered and capped: what the reader sees."""
-    merged = _merge(cards)
-    return [_finish(c) for c in sorted((c for c in merged if _worth_showing(c)), key=_order)[:MAX_CARDS]]
+    """Merged, filtered, ordered and capped, then explained: what the reader sees. An over-usual card
+    points only to cards that are shown, never to one filtered out or cut by the cap."""
+    shown = sorted((c for c in _merge(cards) if _worth_showing(c)), key=_order)[:MAX_CARDS]
+    _explain_over_usual(shown)
+    return [_finish(c) for c in shown]
 
 
 # ------------------------------------------------------------------ failures
@@ -603,9 +605,69 @@ def _parallel_cards(run: Any, now: float, table: Any) -> List[Dict[str, Any]]:
     return out
 
 
+OVER_RATIO = 2.0          # far over usual: past the slow case AND more than this many times typical
+
+
+def _usual_line(u: Dict[str, Any]) -> str:
+    return "{} on {} ({} runs, {})".format(scrub(u["type"]), scrub(u["model"]), u["n"],
+                                          "this project" if u["scope"] == "project" else "your projects")
+
+
+def _over_usual_cards(run: Any, now: float, table: Any) -> List[Dict[str, Any]]:
+    out = []
+    for agent in run.agents:
+        u = agent.usual
+        d = agent.duration_s
+        if not u or not u.get("enough") or agent.status != C.COMPLETED or d is None:
+            continue
+        long = u["typical_s"] > 0 and d > u["slow_s"] and d > OVER_RATIO * u["typical_s"]   # no ratio against 0 s
+        dear = (agent.cost is not None and u.get("typical_cost") and u.get("slow_cost") is not None
+                and agent.cost > u["slow_cost"] and agent.cost > OVER_RATIO * u["typical_cost"])
+        if not (long or dear):
+            continue
+        if long:
+            happened = "{} took {}, {:.1f}x the usual {} for {}.".format(
+                _label(agent), fmt_duration(d), d / u["typical_s"], fmt_duration(u["typical_s"]), _usual_line(u))
+        else:
+            happened = "{} cost {}, {:.1f}x the usual {} for {}.".format(
+                _label(agent), fmt_money(agent.cost), agent.cost / u["typical_cost"], fmt_money(u["typical_cost"]),
+                _usual_line(u))
+        out.append(_card("over_usual:" + agent.agent_id, "over_usual", "sure", "info",
+                         "Took far longer than usual" if long else "Cost far more than usual", happened,
+                         [agent.agent_id], "none", "",
+                         seconds=max(0.0, d - u["typical_s"]) if long else 0.0,
+                         cost=(agent.cost - u["typical_cost"]) if dear else None, label="over usual"))
+    return out
+
+
+def _explain_over_usual(cards: List[Dict[str, Any]]) -> None:
+    """An over-usual card points to the other cards on the same agent, which say why."""
+    for card in cards:
+        if card["rule"] != "over_usual":
+            continue
+        others = [c["title"] for c in cards if c is not card and set(c["agents"]) & set(card["agents"])]
+        card["fix"]["text"] = ("Other cards here explain part of it: " + "; ".join(others) + "." if others else
+                               "No other card explains it. Open the agent and look at its longest tool calls.")
+
+
+def _slow(run: Any, now: float) -> List[Dict[str, Any]]:
+    """Running agents far past what their kind usually takes: the Health box's SLOWER THAN USUAL."""
+    out = []
+    for agent in run.agents:
+        u = agent.usual
+        if not u or not u.get("enough") or agent.status not in (C.RUNNING, C.WAITING) or agent.started_at is None:
+            continue
+        elapsed = now - agent.started_at
+        if elapsed > u["slow_s"] and elapsed > OVER_RATIO * u["typical_s"]:
+            out.append({"agent_id": agent.agent_id, "elapsed_s": elapsed, "typical_s": u["typical_s"],
+                        "slow_s": u["slow_s"], "n": u["n"],
+                        "kind": "{} on {}".format(scrub(u["type"]), scrub(u["model"]))})
+    return out
+
+
 # Every rule: fn(run, now, table) -> cards. Later rules are added to this tuple.
 RULES = (_failure_cards, _verify_cards, _worktree_cards, _compact_cards, _rules_missing_cards,
-         _preapprove_cards, _cheaper_cards, _parallel_cards)
+         _preapprove_cards, _cheaper_cards, _parallel_cards, _over_usual_cards)
 
 
 # ------------------------------------------------------------------ verdict
@@ -640,7 +702,7 @@ def compute(run: Any, now: float, table: Any = None) -> Dict[str, Any]:
     cards = _select(raw)
     cost = run.cost or {}
     enabled = bool(cost.get("enabled"))
-    return {"parts": _verdict_parts(run, cards), "cards": cards, "slow": [],
+    return {"parts": _verdict_parts(run, cards), "cards": cards, "slow": _slow(run, now),
             "failures": sum(1 for c in cards if c["severity"] == "failure"),
             "priced_by": cost.get("source") if enabled else None,
             "as_of": cost.get("as_of") if enabled and cost.get("source") == "list" else None}

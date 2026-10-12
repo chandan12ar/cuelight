@@ -249,5 +249,10 @@ class TestUnexpectedErrorsStillAnswer(HttpTestCase):
         response.close()
 
 
+class TestUsualRoute(HttpTestCase):
+    def test_usual_without_baselines_says_off(self):
+        self.assertEqual(self.get_json("/api/usual")["state"], "off")
+
+
 if __name__ == "__main__":
     unittest.main()

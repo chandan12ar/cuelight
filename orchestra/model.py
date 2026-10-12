@@ -116,6 +116,8 @@ class Agent:
     waste: Any = None
     # What went wrong: API errors, failed calls, retries, timeouts (orchestra.errors.ErrorLog).
     errors: Any = None
+    # What this kind of agent usually takes (orchestra.baselines), or None before past runs are read.
+    usual: Optional[Dict[str, Any]] = None
 
     @property
     def started_at(self) -> Optional[float]:
@@ -203,6 +205,7 @@ class Agent:
             "waste": self._waste_totals(),
             "context_peak": self._context_peak(),
             "errors": self.errors.totals() if self.errors is not None else None,
+            "usual": self.usual,
         }
 
     def _waste_totals(self) -> Optional[Dict[str, int]]:

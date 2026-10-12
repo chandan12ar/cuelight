@@ -1465,6 +1465,13 @@ function renderHealth(run) {
     items.push({ id: near.agent_id, kind: "context", card: "how-full-each-context-got",
       text: "CONTEXT " + fmtPct(near.fill) + " FULL — " + near.label + " (" + fmtCount(near.tokens) + " tokens)" });
   }
+  // Running far past what this kind of agent usually takes (orchestra/baselines.py).
+  // (Not while replaying: the list is for now, and a replay shows an earlier moment.)
+  for (const s of (run.replay_at === undefined && run.advice && run.advice.slow) || []) {
+    const agent = run.agents.find((a) => a.agent_id === s.agent_id);
+    items.push({ id: s.agent_id, kind: "slow", text: "SLOWER THAN USUAL — " + ((agent && agent.description) || s.agent_id) +
+      ": " + fmtDuration(s.elapsed_s) + ", usually " + fmtDuration(s.typical_s) });
+  }
   const mainStuck = stuckFor("");
   if (mainStuck) items.push({ id: "", kind: "retrying", card: "what-went-wrong", text: retrying("Main session", mainStuck) });
   const box = $("health");
@@ -1749,6 +1756,8 @@ function setView(view) {
   // for the next cycle to notice the tab is now visible.
   if (view === "activity" && state.run) refreshTicker(state.run);
   if (view === "history") loadHistory();
+  // advice.js may not be loaded yet when a #view=advice link calls this; renderAdvice loads the numbers then.
+  if (view === "advice" && typeof loadUsual === "function") loadUsual();
 }
 
 const AGENT_VIEWS = ["timeline", "graph", "agents", "insights", "activity", "workfloor"];
@@ -2980,6 +2989,7 @@ function switchSession(sessionId) {
   if (state.replay.on) toggleReplay();      // a replay belongs to one session
   state.run = null;
   state.liveRun = null;
+  state.usual = undefined;          // the usual numbers are per project: ask again for this session's
   // A different session's edges are all pre-existing history to us, not
   // events happening live — reseed instead of flashing every one of them.
   state.seenEdgeKeys = new Set();
@@ -5144,6 +5154,7 @@ async function openDrawer(agentId) {
     ...(agent.loop ? [["possible loop", loopText(agent.loop)]] : []),
     ...(agent.cost !== null && agent.cost !== undefined && state.run && state.run.cost
       ? [["cost", fmtMoney(agent.cost, state.run.cost.currency)]] : []),
+    ...(agent.usual ? [["usual", usualText(agent.usual, agent.duration_s)]] : []),
     ["cache hit", fmtPct(cacheHitRatio(agent.tokens)) +
       (cacheHitRatio(agent.tokens) !== null ? "  (" + fmtTokenMix(agent.tokens) + ")" : "")],
     ["rounds", agent.rounds.length],
