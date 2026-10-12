@@ -51,11 +51,15 @@ class TestScan(unittest.TestCase):
 
     def test_the_cache_is_reused_until_a_session_changes(self):
         build_session(self.root, "s1")
-        self.store().scan()
+        real = baselines.rows_for
+        two_hours_on = time.time() + 2 * 3600        # a3 is cut off by then, so the session is settled
+        with mock.patch.object(baselines, "rows_for",
+                               side_effect=lambda paths: real(paths, now_fn=lambda: two_hours_on)):
+            self.store().scan()
         with mock.patch.object(baselines, "rows_for", side_effect=AssertionError("read again")):
             again = self.store()
             again.scan()
-        self.assertEqual(len(again.rows()), 2)
+        self.assertEqual(len(again.rows()), 3)
         path = os.path.join(self.root, "projects", "E--proj", "s1.jsonl")
         st = os.stat(path)
         os.utime(path, ns=(st.st_atime_ns, st.st_mtime_ns + 5_000_000_000))
