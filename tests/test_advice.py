@@ -12,6 +12,7 @@ from orchestra.errors import ErrorLog
 from orchestra.livestate import ANSWERED, PERMISSION, UNANSWERED, Wait
 from orchestra.model import Agent, Round, Run, ToolCall, WriteConflict
 from orchestra.waste import WasteLog
+from tests import fake_secrets as fake
 
 
 def agent(aid="a1", status=C.COMPLETED, start=0.0, end=600.0, desc=None, **kw):
@@ -378,6 +379,7 @@ class TestPreapprove(unittest.TestCase):
         (c,) = rule(run([], waits=waits, main_errors=main), "preapprove")
         self.assertEqual(c["agents"], [""])
         self.assertIn("Bash(pytest *)", c["fix"]["snippet"])
+        self.assertIn("over 1 permission prompt", c["happened"])
 
     def test_a_wait_before_any_call(self):
         waits = [Wait(agent_id="a1", kind=PERMISSION, start=5.0, end=200.0, state=ANSWERED)]
@@ -397,6 +399,35 @@ class TestPreapprove(unittest.TestCase):
         for url in ("http://[", "https://a.com),Bash(rm:*"):
             (c,) = self.waiting(url, tool="WebFetch")
             self.assertEqual((c["fix"]["snippet"], c["fix"]["where"]), ("", "none"), url)
+
+    def test_a_url_whose_host_is_not_plain_gets_no_rule(self):
+        # Python's parser and Claude Code's can disagree about these; an address, a local name or userinfo
+        # is not a domain a rule should name.
+        for url in ("https://evil.com\\@attacker.net/x", "https://evil.com@attacker.net/x",
+                    "https://evil.com/\\@attacker.net/x", "https://evil.com/x@attacker.net",
+                    "http://169.254.169.254/latest", "http://localhost:8080/x", "https://-a-.com/x"):
+            (c,) = self.waiting(url, tool="WebFetch")
+            self.assertEqual((c["fix"]["snippet"], c["fix"]["where"]), ("", "none"), url)
+
+    def test_a_web_fetch_host_keeps_its_rule_through_a_port_and_a_query(self):
+        (c,) = self.waiting("https://docs.example.com:8443/a?b", tool="WebFetch")
+        self.assertEqual(json.loads(c["fix"]["snippet"])["permissions"]["allow"], ["WebFetch(domain:docs.example.com)"])
+
+    def test_three_short_prompts_still_get_their_rule(self):
+        (c,) = self.waiting("pytest", n=3, seconds=5.0)
+        self.assertEqual(json.loads(c["fix"]["snippet"])["permissions"]["allow"], ["Bash(pytest *)"])
+        self.assertAlmostEqual(c["impact"]["seconds"], 15.0)
+
+    def test_each_rule_card_says_how_far_it_reaches(self):
+        (bash,) = self.waiting("pytest -q")
+        (web,) = self.waiting("https://docs.example.com/a", tool="WebFetch")
+        self.assertIn("allows any arguments", bash["fix"]["text"])
+        self.assertIn("any page on that domain", web["fix"]["text"])
+
+    def test_a_tool_name_is_scrubbed_before_it_is_shown(self):
+        (c,) = self.waiting("git push", tool=fake.ANTHROPIC_KEY)
+        self.assertNotIn(fake.ANTHROPIC_KEY, c["title"] + c["happened"])
+        self.assertIn("redacted", c["title"] + c["happened"])
 
 
 if __name__ == "__main__":

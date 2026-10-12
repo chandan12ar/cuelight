@@ -14,7 +14,6 @@ import hashlib
 import json
 import re
 from typing import Any, Dict, List, Optional
-from urllib.parse import urlparse
 
 from orchestra import constants as C
 from orchestra import livestate
@@ -364,7 +363,12 @@ SAFE_PREFIXES = tuple(tuple(p.split()) for p in (
     "go test", "go build", "go vet", "cargo test", "cargo check", "cargo build", "cargo clippy",
     "make test", "make check", "make lint", "ruff check", "mypy", "tsc", "eslint"))
 UNSAFE_MARKS = (";", "&", "|", ">", "<", "`", "$(", "\n", "\r")
-HOST = re.compile(r"[a-z0-9-]+(?:\.[a-z0-9-]+)*")   # a domain a WebFetch rule can name
+URL_HOST = re.compile(r"^https?://(?P<host>[a-z0-9.-]+)(?::[0-9]+)?(?:[/?#]|$)")
+LABEL = re.compile(r"[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?")   # 1 to 63 characters, no dash at either end
+TOP_LABEL = re.compile(r"[a-z]+")                              # a domain's last label is a word, never a number
+# What an allow rule for each tool says it reaches, shown on the card so no one reads it as narrower.
+SCOPE = {"Bash": "This allows any arguments, and runs code from your project (its tests or build scripts).",
+         "WebFetch": "This allows any page on that domain."}
 PROMPTS_ENOUGH = 3
 
 
@@ -382,17 +386,23 @@ def safe_prefix(command: str) -> Optional[str]:
 
 
 def _is_whole(text: str, same: Any) -> bool:
-    """True when `text` is the whole command or URL. The error log keeps only the first line of a
-    command (cut at 160 characters) and a hash of the whole one, so the line is the whole only when
-    that hash is its own: a second line, a carriage return or a cut never matches."""
+    """True when `text` is the whole command. Commands only: the error log keeps a command's first line
+    (cut at 160 characters) and a hash of the whole command, so the line is the whole only when that hash
+    is its own. A second line, a carriage return or a cut never matches. A URL's logged hash is of the
+    shown text itself, so it proves nothing and is not checked this way."""
     return bool(text) and hashlib.sha1(text.encode("utf-8", "replace")).hexdigest()[:16] == same
 
 
 def _host(url: str) -> str:
-    try:
-        return urlparse(url).hostname or ""
-    except ValueError:      # a malformed address (say an unclosed "[") is no host at all
+    """The domain a WebFetch rule can name, or "". Read as one strict pattern, not as a general parser:
+    a backslash or an "@" anywhere could make Python's parser and the fetch's disagree about the host, so
+    no host is taken. An address, a single-label name or a malformed label is not a domain to approve."""
+    text = url.lower()
+    m = None if ("\\" in text or "@" in text) else URL_HOST.match(text)
+    labels = m.group("host").split(".") if m else []
+    if len(labels) < 2 or not TOP_LABEL.fullmatch(labels[-1]) or not all(LABEL.fullmatch(x) for x in labels):
         return ""
+    return m.group("host")
 
 
 def _waited_on(run: Any, agent_id: str, start: float) -> Optional[List[Any]]:
@@ -415,7 +425,7 @@ def _preapprove_cards(run: Any, now: float, table: Any) -> List[Dict[str, Any]]:
         if wait.kind != livestate.PERMISSION or wait.state == livestate.UNANSWERED:
             continue
         call = _waited_on(run, wait.agent_id, wait.start)
-        tool, target = (call[1], call[2] or "") if call else ("a tool", "")
+        tool, target = (scrub(call[1])[:60], call[2] or "") if call else ("a tool", "")
         whole = call is not None and _is_whole(target, call[5])
         shown, allow = "", None
         if tool == "Bash":
@@ -427,7 +437,7 @@ def _preapprove_cards(run: Any, now: float, table: Any) -> List[Dict[str, Any]]:
             host = _host(target)
             shown = host
             key = "preapprove:WebFetch:" + host
-            allow = "WebFetch(domain:{})".format(host) if whole and HOST.fullmatch(host) else None
+            allow = "WebFetch(domain:{})".format(host) if host else None
         else:
             key = "preapprove:" + tool
         g = groups.setdefault(key, {"tool": tool, "shown": shown, "allow": allow, "seconds": 0.0, "prompts": 0,
@@ -447,7 +457,8 @@ def _preapprove_cards(run: Any, now: float, table: Any) -> List[Dict[str, Any]]:
             out.append(_card(key, "preapprove", "sure", "fix", "Pre-approve a command you kept approving", happened,
                              g["agents"], "settings",
                              "Add this to .claude/settings.json (everyone on the project) or "
-                             ".claude/settings.local.json (just you), merged with any rules already there:",
+                             ".claude/settings.local.json (just you), merged with any rules already there: "
+                             + SCOPE[g["tool"]],
                              json.dumps({"permissions": {"allow": [g["allow"]]}}, indent=2),
                              seconds=g["seconds"], label="waiting on you", always=enough))
         else:
