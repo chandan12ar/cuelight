@@ -223,6 +223,26 @@ class TestSureRules(unittest.TestCase):
         self.assertEqual(c["agents"], ["a1", "a2"])
         self.assertIn("src/x.py", c["happened"])
 
+    def test_writers_that_took_turns_are_a_handoff_not_a_conflict(self):
+        r = run([agent("a1", start=0.0, end=200.0), agent("a2", start=300.0, end=500.0)],
+                write_conflicts=[WriteConflict(path="src/x.py", writer_ids=["a1", "a2"])])
+        self.assertEqual(rule(r, "worktree"), [])
+
+    def test_an_agent_still_running_runs_until_now(self):
+        conflict = [WriteConflict(path="src/x.py", writer_ids=["a1", "a2"])]
+        running = agent("a1", start=0.0, end=None)
+        self.assertEqual(len(rule(run([running, agent("a2", start=5000.0, end=5100.0)], write_conflicts=conflict),
+                                  "worktree")), 1)
+        self.assertEqual(rule(run([agent("a1", start=0.0, end=200.0), agent("a2", start=300.0, end=None)],
+                                  write_conflicts=conflict), "worktree"), [])
+
+    def test_a_writer_with_no_known_start_is_never_dropped(self):
+        unknown = agent("a2")
+        unknown.rounds = []
+        r = run([agent("a1", start=0.0, end=200.0), unknown],
+                write_conflicts=[WriteConflict(path="src/x.py", writer_ids=["a1", "a2"])])
+        self.assertEqual(len(rule(r, "worktree")), 1)
+
     def test_a_cache_rebuilt_after_a_long_break_is_priced(self):
         log = WasteLog()
         log.calls = OrderedDict([("m1", [0.0, "claude-sonnet-5", 50_000, 0, 10, 10]),
@@ -391,6 +411,14 @@ class TestPreapprove(unittest.TestCase):
         self.assertEqual(c["agents"], [""])
         self.assertIn("Bash(pytest *)", c["fix"]["snippet"])
         self.assertIn("over 1 permission prompt", c["happened"])
+        self.assertTrue(c["happened"].startswith("Waited "), c["happened"])
+
+    def test_a_question_to_you_is_never_a_permission_to_pre_approve(self):
+        for tool in ("AskUserQuestion", "ExitPlanMode"):
+            main = errlog(calls=[[100.0 * i, tool, "", True, "", same_key(tool)] for i in range(1, 4)])
+            waits = [Wait(agent_id="", kind=PERMISSION, start=100.0 * i + 0.5, end=100.0 * i + 60.0, state=ANSWERED)
+                     for i in range(1, 4)]
+            self.assertEqual(rule(run([], waits=waits, main_errors=main), "preapprove"), [], tool)
 
     def test_a_wait_before_any_call(self):
         waits = [Wait(agent_id="a1", kind=PERMISSION, start=5.0, end=200.0, state=ANSWERED)]

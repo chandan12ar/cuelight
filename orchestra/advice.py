@@ -298,11 +298,32 @@ def _verify_cards(run: Any, now: float, table: Any) -> List[Dict[str, Any]]:
     return out
 
 
+def _overlapped(run: Any, writers: List[str], now: float) -> bool:
+    """True when at least two of the writers were running at the same time. An agent still running
+    runs until `now`; one with no known start (or not in the run) counts as overlapping, so it is
+    never silently dropped. Writers that took turns are a handoff, not a conflict."""
+    spans = []
+    for writer in writers:
+        agent = run.agent(writer)
+        start = agent.started_at if agent is not None else None
+        if start is None:
+            spans.append(None)
+        else:
+            spans.append((start, agent.ended_at if agent.ended_at is not None else now))
+    for i, a in enumerate(spans):
+        for b in spans[i + 1:]:
+            if a is None or b is None or (a[0] < b[1] and b[0] < a[1]):
+                return True
+    return False
+
+
 def _worktree_cards(run: Any, now: float, table: Any) -> List[Dict[str, Any]]:
     names = {a.agent_id: _label(a) for a in run.agents}
     out = []
     for conflict in run.write_conflicts:
         writers = list(conflict.writer_ids)
+        if not _overlapped(run, writers, now):
+            continue
         who = ", ".join(names.get(w, w[:12]) for w in writers[:4])
         out.append(_card("worktree", "worktree", "sure", "fix", "Agents wrote the same file",
                          "{} all wrote {}.".format(who, scrub(conflict.path)[:160]), writers, "agent",
@@ -374,6 +395,8 @@ TOP_LABEL = re.compile(r"[a-z]+")                              # a domain's last
 SCOPE = {"Bash": "This allows any arguments, and runs code from your project (its tests or build scripts).",
          "WebFetch": "This allows any page on that domain."}
 PROMPTS_ENOUGH = 3
+# Tools that ask you something by design: answering is the point, and no rule could answer for you.
+ASKS_THE_USER = frozenset(("AskUserQuestion", "ExitPlanMode"))
 
 
 def safe_prefix(command: str) -> Optional[str]:
@@ -435,6 +458,8 @@ def _preapprove_cards(run: Any, now: float, table: Any) -> List[Dict[str, Any]]:
             continue
         call = _waited_on(run, wait.agent_id, wait.start)
         tool, target = (scrub(call[1])[:60], call[2] or "") if call else ("a tool", "")
+        if tool in ASKS_THE_USER:
+            continue
         whole = call is not None and _is_whole(target, call[5])
         shown, allow = "", None
         if tool == "Bash":
@@ -459,8 +484,8 @@ def _preapprove_cards(run: Any, now: float, table: Any) -> List[Dict[str, Any]]:
     for key, g in groups.items():
         shown = scrub(g["shown"])[:80]
         what = "`{}`".format(shown) if g["tool"] == "Bash" else (g["tool"] + " " + shown).strip()
-        happened = "Agents waited {} over {} for {}.".format(fmt_duration(g["seconds"]),
-                                                              _plural(g["prompts"], "permission prompt"), what)
+        happened = "Waited {} over {} for {}.".format(fmt_duration(g["seconds"]),
+                                                      _plural(g["prompts"], "permission prompt"), what)
         enough = g["prompts"] >= PROMPTS_ENOUGH
         if g["allow"]:
             out.append(_card(key, "preapprove", "sure", "fix", "Pre-approve a command you kept approving", happened,
