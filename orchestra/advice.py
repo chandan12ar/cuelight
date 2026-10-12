@@ -11,9 +11,13 @@ ASCII only, so the command line can print it on any console.
 """
 
 import hashlib
+import json
+import re
 from typing import Any, Dict, List, Optional
+from urllib.parse import urlparse
 
 from orchestra import constants as C
+from orchestra import livestate
 from orchestra import pressure
 from orchestra import verify
 from orchestra import waste as waste_mod
@@ -351,8 +355,112 @@ def _rules_missing_cards(run: Any, now: float, table: Any) -> List[Dict[str, Any
     return out
 
 
+# Commands worth pre-approving: tests, builds, linters. Anything else is reported, never suggested:
+# allowing it for good would also allow commands the user has not seen.
+SAFE_PREFIXES = tuple(tuple(p.split()) for p in (
+    "npm test", "npm run test", "npm run lint", "npm run build", "npm run typecheck",
+    "pnpm test", "pnpm run test", "pnpm run lint", "pnpm run build", "yarn test", "yarn lint", "yarn build",
+    "pytest", "python -m pytest", "python -m unittest", "python3 -m pytest", "python3 -m unittest",
+    "go test", "go build", "go vet", "cargo test", "cargo check", "cargo build", "cargo clippy",
+    "make test", "make check", "make lint", "ruff check", "mypy", "tsc", "eslint"))
+UNSAFE_MARKS = (";", "&", "|", ">", "<", "`", "$(", "\n", "\r")
+HOST = re.compile(r"[a-z0-9-]+(?:\.[a-z0-9-]+)*")   # a domain a WebFetch rule can name
+PROMPTS_ENOUGH = 3
+
+
+def safe_prefix(command: str) -> Optional[str]:
+    """The allow-listed prefix a command starts with, or None. A compound command, a redirect or a
+    substitution never gets one: a prefix rule for it would approve more than it says."""
+    text = (command or "").strip()
+    if not text or any(mark in text for mark in UNSAFE_MARKS):
+        return None
+    words = tuple(text.split())
+    for prefix in sorted(SAFE_PREFIXES, key=len, reverse=True):
+        if words[:len(prefix)] == prefix:
+            return " ".join(prefix)
+    return None
+
+
+def _is_whole(text: str, same: Any) -> bool:
+    """True when `text` is the whole command or URL. The error log keeps only the first line of a
+    command (cut at 160 characters) and a hash of the whole one, so the line is the whole only when
+    that hash is its own: a second line, a carriage return or a cut never matches."""
+    return bool(text) and hashlib.sha1(text.encode("utf-8", "replace")).hexdigest()[:16] == same
+
+
+def _host(url: str) -> str:
+    try:
+        return urlparse(url).hostname or ""
+    except ValueError:      # a malformed address (say an unclosed "[") is no host at all
+        return ""
+
+
+def _waited_on(run: Any, agent_id: str, start: float) -> Optional[List[Any]]:
+    """The call a prompt was about: the latest one the agent made at or before it."""
+    if agent_id:
+        owner = run.agent(agent_id)
+        log = owner.errors if owner is not None else None
+    else:
+        log = run.main_errors
+    best = None
+    for call in (log.calls if log is not None else []):
+        if call[0] is not None and call[0] <= start + 1.0 and (best is None or call[0] >= best[0]):
+            best = call
+    return best
+
+
+def _preapprove_cards(run: Any, now: float, table: Any) -> List[Dict[str, Any]]:
+    groups: Dict[str, Dict[str, Any]] = {}
+    for wait in run.waits:
+        if wait.kind != livestate.PERMISSION or wait.state == livestate.UNANSWERED:
+            continue
+        call = _waited_on(run, wait.agent_id, wait.start)
+        tool, target = (call[1], call[2] or "") if call else ("a tool", "")
+        whole = call is not None and _is_whole(target, call[5])
+        shown, allow = "", None
+        if tool == "Bash":
+            prefix = safe_prefix(target) if whole else None
+            shown = prefix or (target.split()[0] if target.split() else "a command")
+            key = "preapprove:Bash:" + (prefix or "other:" + shown)
+            allow = "Bash({} *)".format(prefix) if prefix else None
+        elif tool == "WebFetch":
+            host = _host(target)
+            shown = host
+            key = "preapprove:WebFetch:" + host
+            allow = "WebFetch(domain:{})".format(host) if whole and HOST.fullmatch(host) else None
+        else:
+            key = "preapprove:" + tool
+        g = groups.setdefault(key, {"tool": tool, "shown": shown, "allow": allow, "seconds": 0.0, "prompts": 0,
+                                    "agents": []})
+        g["seconds"] += wait.seconds(now)
+        g["prompts"] += wait.prompts
+        if wait.agent_id not in g["agents"]:
+            g["agents"].append(wait.agent_id)
+    out = []
+    for key, g in groups.items():
+        shown = scrub(g["shown"])[:80]
+        what = "`{}`".format(shown) if g["tool"] == "Bash" else (g["tool"] + " " + shown).strip()
+        happened = "Agents waited {} over {} for {}.".format(fmt_duration(g["seconds"]),
+                                                              _plural(g["prompts"], "permission prompt"), what)
+        enough = g["prompts"] >= PROMPTS_ENOUGH
+        if g["allow"]:
+            out.append(_card(key, "preapprove", "sure", "fix", "Pre-approve a command you kept approving", happened,
+                             g["agents"], "settings",
+                             "Add this to .claude/settings.json (everyone on the project) or "
+                             ".claude/settings.local.json (just you), merged with any rules already there:",
+                             json.dumps({"permissions": {"allow": [g["allow"]]}}, indent=2),
+                             seconds=g["seconds"], label="waiting on you", always=enough))
+        else:
+            out.append(_card(key, "preapprove", "sure", "info", "You kept approving " + what, happened, g["agents"],
+                             "none", "Not suggested for pre-approval: allowing it for good would also allow commands "
+                                     "you have not seen. Consider whether the agent needs it.",
+                             seconds=g["seconds"], label="waiting on you", always=enough))
+    return out
+
+
 # Every rule: fn(run, now, table) -> cards. Later rules are added to this tuple.
-RULES = (_failure_cards, _verify_cards, _worktree_cards, _compact_cards, _rules_missing_cards)
+RULES = (_failure_cards, _verify_cards, _worktree_cards, _compact_cards, _rules_missing_cards,
+         _preapprove_cards)
 
 
 # ------------------------------------------------------------------ verdict

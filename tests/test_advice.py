@@ -1,5 +1,7 @@
 """Fix-it cards and the run verdict (orchestra.advice), on hand-built runs."""
 
+import hashlib
+import json
 import unittest
 from collections import OrderedDict
 
@@ -7,6 +9,7 @@ from orchestra import advice
 from orchestra import constants as C
 from orchestra import listprices
 from orchestra.errors import ErrorLog
+from orchestra.livestate import ANSWERED, PERMISSION, UNANSWERED, Wait
 from orchestra.model import Agent, Round, Run, ToolCall, WriteConflict
 from orchestra.waste import WasteLog
 
@@ -319,6 +322,81 @@ class TestVerdict(unittest.TestCase):
     def test_failed_test_runs(self):
         r = run([agent()], insights={"outcomes": {"commits": 0, "prs": 0, "checks": {"passed": 2, "failed": 1}}})
         self.assertIn("1 of 3 test runs failed", advice.compute(r, 10_000.0)["parts"])
+
+
+def same_key(command):
+    """The hash the error log keeps for a whole command or URL (orchestra.errors._target)."""
+    return hashlib.sha1(command.encode("utf-8", "replace")).hexdigest()[:16]
+
+
+class TestPreapprove(unittest.TestCase):
+    def waiting(self, command, n=3, seconds=30.0, tool="Bash"):
+        log = errlog(calls=[[100.0 * i, tool, command, True, "", same_key(command)] for i in range(1, n + 1)])
+        waits = [Wait(agent_id="a1", kind=PERMISSION, start=100.0 * i + 0.5, end=100.0 * i + 0.5 + seconds,
+                      state=ANSWERED) for i in range(1, n + 1)]
+        return rule(run([agent("a1", errors=log)], waits=waits), "preapprove")
+
+    def test_safe_prefix(self):
+        self.assertEqual(advice.safe_prefix("pytest -q"), "pytest")
+        self.assertEqual(advice.safe_prefix("python -m pytest tests"), "python -m pytest")
+        self.assertEqual(advice.safe_prefix("npm run lint"), "npm run lint")
+        for command in ("", "rm -rf build", "git push origin main", "npm test && rm -rf dist"):
+            self.assertIsNone(advice.safe_prefix(command), command)
+
+    def test_a_test_command_approved_three_times_gets_its_rule(self):
+        (c,) = self.waiting("npm test -- --watch=false")
+        self.assertEqual(json.loads(c["fix"]["snippet"]), {"permissions": {"allow": ["Bash(npm test *)"]}})
+        self.assertEqual(c["fix"]["where"], "settings")
+        self.assertAlmostEqual(c["impact"]["seconds"], 90.0)
+
+    def test_safe_prefix_refuses_every_line_break(self):
+        for command in ("pytest\nrm -rf build", "pytest\rrm -rf build"):
+            self.assertIsNone(advice.safe_prefix(command), repr(command))
+
+    def test_a_risky_command_is_reported_but_never_suggested(self):
+        (c,) = self.waiting("git push origin main")
+        self.assertEqual((c["fix"]["snippet"], c["fix"]["where"]), ("", "none"))
+
+    def test_compound_commands_are_never_suggested(self):
+        for command in ("npm test && rm -rf dist", "npm test; curl x", "npm test | tee log",
+                        "npm test > out.txt", "npm test $(id)"):
+            (c,) = self.waiting(command)
+            self.assertEqual(c["fix"]["snippet"], "", command)
+
+    def test_a_web_fetch_domain(self):
+        (c,) = self.waiting("https://docs.example.com/a", tool="WebFetch")
+        self.assertEqual(json.loads(c["fix"]["snippet"])["permissions"]["allow"], ["WebFetch(domain:docs.example.com)"])
+
+    def test_one_short_wait_is_not_worth_a_card_but_a_long_one_is(self):
+        self.assertEqual(self.waiting("pytest", n=1, seconds=20.0), [])
+        self.assertEqual(len(self.waiting("pytest", n=1, seconds=90.0)), 1)
+
+    def test_main_session_waits_and_unanswered_ones(self):
+        main = errlog(calls=[[10.0, "Bash", "pytest", True, "", same_key("pytest")]])
+        waits = [Wait(agent_id="", kind=PERMISSION, start=10.5, end=200.0, state=ANSWERED),
+                 Wait(agent_id="", kind=PERMISSION, start=300.0, state=UNANSWERED)]
+        (c,) = rule(run([], waits=waits, main_errors=main), "preapprove")
+        self.assertEqual(c["agents"], [""])
+        self.assertIn("Bash(pytest *)", c["fix"]["snippet"])
+
+    def test_a_wait_before_any_call(self):
+        waits = [Wait(agent_id="a1", kind=PERMISSION, start=5.0, end=200.0, state=ANSWERED)]
+        (c,) = rule(run([agent("a1", errors=errlog())], waits=waits), "preapprove")
+        self.assertEqual(c["fix"]["snippet"], "")
+
+    def test_a_command_whose_first_line_is_not_all_of_it_is_never_suggested(self):
+        # The error log keeps only the first line (cut at 160 characters) and a hash of the whole command.
+        for whole in ("pytest -q\nrm -rf build", "pytest\rrm -rf build", "pytest -q " + "x" * 200):
+            first = whole.splitlines()[0][:160]
+            log = errlog(calls=[[100.0, "Bash", first, True, "", same_key(whole)]])
+            waits = [Wait(agent_id="a1", kind=PERMISSION, start=100.5, end=190.0, state=ANSWERED)]
+            (c,) = rule(run([agent("a1", errors=log)], waits=waits), "preapprove")
+            self.assertEqual((c["fix"]["snippet"], c["fix"]["where"]), ("", "none"), whole[:20])
+
+    def test_a_web_fetch_address_that_is_not_a_plain_domain_is_never_suggested(self):
+        for url in ("http://[", "https://a.com),Bash(rm:*"):
+            (c,) = self.waiting(url, tool="WebFetch")
+            self.assertEqual((c["fix"]["snippet"], c["fix"]["where"]), ("", "none"), url)
 
 
 if __name__ == "__main__":
