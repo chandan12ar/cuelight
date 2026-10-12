@@ -15,6 +15,8 @@ from typing import Any, Dict, List, Optional
 
 from orchestra import constants as C
 from orchestra import pressure
+from orchestra import verify
+from orchestra import waste as waste_mod
 from orchestra.redact import scrub
 from orchestra.runaway import detect_loop
 
@@ -235,8 +237,110 @@ def _failure_cards(run: Any, now: float, table: Any) -> List[Dict[str, Any]]:
     return [_failure(a, now) for a in run.agents if a.status in DONE_BADLY]
 
 
+# ------------------------------------------------------------------ sure rules
+
+def _seen_check(run: Any) -> str:
+    """The latest test, build or lint command any agent ran: the one to ask for."""
+    best = None
+    for agent in run.agents:
+        for call in agent.tool_calls:
+            if call.verify == verify.CHECK and call.timestamp is not None and \
+                    (best is None or call.timestamp > best.timestamp):
+                best = call
+    return scrub(best.target)[:120] if best is not None else ""
+
+
+def _verify_cards(run: Any, now: float, table: Any) -> List[Dict[str, Any]]:
+    out: List[Dict[str, Any]] = []
+    seen: Optional[str] = None
+    for agent in run.agents:
+        v = agent.verification
+        if not v or not v.get("final") or v.get("state") not in (verify.UNCHECKED, verify.FAILING):
+            continue
+        if seen is None:
+            seen = _seen_check(run)
+        label = _label(agent)
+        if v["state"] == verify.FAILING:
+            last = scrub((v.get("last_check") or {}).get("target") or "")[:120]
+            title, many = "Finished with its checks failing", "{n} agents finished with their checks failing"
+            happened = "{}'s last check, {}, failed.".format(label, last or "a check")
+            command = last or seen
+        else:
+            edited = scrub((v.get("last_edit") or {}).get("target") or "")[:120] or "code"
+            title, many = ("Reported done without running the tests",
+                           "{n} agents reported done without running the tests")
+            happened = "{} edited {} and ran no test, build or lint after it.".format(label, edited)
+            command = seen
+        snippet = "Before you report done, run {} and include its result. If it fails, fix it or say so.".format(
+            "`" + command + "`" if command else "the project's tests")
+        out.append(_card("verify:" + v["state"], "verify", "sure", "fix", title, happened, [agent.agent_id],
+                         "instructions", "Add this to the agent's instructions (its brief, or its definition "
+                                         "in .claude/agents/):", snippet,
+                         seconds=agent.duration_s or 0.0, tokens=_fresh(agent.tokens), cost=agent.cost,
+                         label="work not checked", title_many=many, always=True))
+    return out
+
+
+def _worktree_cards(run: Any, now: float, table: Any) -> List[Dict[str, Any]]:
+    names = {a.agent_id: _label(a) for a in run.agents}
+    out = []
+    for conflict in run.write_conflicts:
+        writers = list(conflict.writer_ids)
+        who = ", ".join(names.get(w, w[:12]) for w in writers[:4])
+        out.append(_card("worktree", "worktree", "sure", "fix", "Agents wrote the same file",
+                         "{} all wrote {}.".format(who, scrub(conflict.path)[:160]), writers, "agent",
+                         "Give agents that edit in parallel their own copy of the repository: add this to each "
+                         "one's definition in .claude/agents/:", "isolation: worktree",
+                         title_many="Agents wrote the same files ({n} files)", always=True))
+    return out
+
+
+def _compact_cards(run: Any, now: float, table: Any) -> List[Dict[str, Any]]:
+    sources = [("", run.main_waste)] + [(a.agent_id, a.waste) for a in run.agents]
+    count = tokens = 0
+    longest, extra = 0.0, 0.0
+    agents: List[str] = []
+    for agent_id, log in sources:
+        if log is None:
+            continue
+        for r in log.rebuilds():
+            if r["cause"] not in (waste_mod.IDLE_LONG, waste_mod.IDLE_SHORT):
+                continue
+            count += 1
+            tokens += r["tokens"]
+            longest = max(longest, r["gap_s"])
+            if agent_id not in agents:
+                agents.append(agent_id)
+            prices = table.price_for(r["model"]) if table is not None else None
+            if prices is not None:
+                extra += r["tokens"] * max(0.0, prices["cache_create"] - prices["cache_read"]) / 1_000_000
+    if not count:
+        return []
+    return [_card("compact", "compact", "sure", "fix", "The cache was rebuilt after a break",
+                  "After {} (the longest {}), Claude Code wrote {} tokens of context to the prompt cache "
+                  "again.".format(_plural(count, "break"), fmt_duration(longest), fmt_count(tokens)),
+                  agents, "habit", "Before a break of more than a few minutes, run /compact so less has to be "
+                                   "written again; if you won't need the old context, /clear instead.",
+                  tokens=tokens, cost=extra if table is not None else None, label="extra cache writes")]
+
+
+def _rules_missing_cards(run: Any, now: float, table: Any) -> List[Dict[str, Any]]:
+    context = (run.insights or {}).get("context") or {}
+    out = []
+    for row in context.get("missing") or []:
+        files = ", ".join(scrub(p)[:120] for p in (row.get("missing") or [])[:3])
+        out.append(_card("rules_missing", "rules_missing", "sure", "fix", "An agent ran without your project rules",
+                         "{} did not load {}, which the main session had.".format(
+                             scrub(row.get("label") or "")[:60] or row["agent_id"][:12], files),
+                         [row["agent_id"]], "agent",
+                         "If it must follow them, name them in its instructions or definition. If its definition "
+                         "sets omitClaudeMd: true this is expected; otherwise check it ran in the project folder.",
+                         title_many="{n} agents ran without your project rules", always=True))
+    return out
+
+
 # Every rule: fn(run, now, table) -> cards. Later rules are added to this tuple.
-RULES = (_failure_cards,)
+RULES = (_failure_cards, _verify_cards, _worktree_cards, _compact_cards, _rules_missing_cards)
 
 
 # ------------------------------------------------------------------ verdict

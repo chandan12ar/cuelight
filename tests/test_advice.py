@@ -5,8 +5,9 @@ from collections import OrderedDict
 
 from orchestra import advice
 from orchestra import constants as C
+from orchestra import listprices
 from orchestra.errors import ErrorLog
-from orchestra.model import Agent, Round, Run, ToolCall
+from orchestra.model import Agent, Round, Run, ToolCall, WriteConflict
 from orchestra.waste import WasteLog
 
 
@@ -168,6 +169,68 @@ class TestFailureCauses(unittest.TestCase):
 
     def test_a_running_agent_gets_no_failure_card(self):
         self.assertEqual(cards(run([agent(status=C.RUNNING, end=None)])), [])
+
+
+def unchecked(edit="src/app.py"):
+    return {"state": "unchecked", "final": True, "checked_before": False, "last_check": None,
+            "last_edit": {"tool": "Edit", "target": edit, "at": 50.0}}
+
+
+class TestSureRules(unittest.TestCase):
+    def test_unchecked_work_asks_for_the_check_seen_in_the_run(self):
+        a = agent(verification=unchecked(), tokens={"input": 5000, "output": 2000})
+        other = agent("a2", tool_calls=[ToolCall(name="Bash", target="pytest -q", timestamp=10.0, ok=True,
+                                                 verify="check")])
+        (c,) = rule(run([a, other]), "verify")
+        self.assertIn("src/app.py", c["happened"])
+        self.assertIn("run `pytest -q`", c["fix"]["snippet"])
+        self.assertEqual(c["fix"]["where"], "instructions")
+
+    def test_without_a_check_seen_it_names_the_project_tests(self):
+        (c,) = rule(run([agent(verification=unchecked())]), "verify")
+        self.assertIn("the project's tests", c["fix"]["snippet"])
+
+    def test_a_failing_last_check(self):
+        v = dict(unchecked(), state="failing", last_check={"tool": "Bash", "target": "npm test", "at": 60.0})
+        (c,) = rule(run([agent(verification=v)]), "verify")
+        self.assertIn("failing", c["title"])
+        self.assertIn("npm test", c["happened"])
+
+    def test_checked_or_unfinished_work_gets_nothing(self):
+        done = dict(unchecked(), state="checked")
+        running = dict(unchecked(), final=False)
+        self.assertEqual(rule(run([agent(verification=done), agent("a2", verification=running)]), "verify"), [])
+
+    def test_two_writers_of_one_file(self):
+        r = run([agent("a1"), agent("a2")], write_conflicts=[WriteConflict(path="src/x.py", writer_ids=["a1", "a2"])])
+        (c,) = rule(r, "worktree")
+        self.assertEqual(c["fix"]["snippet"], "isolation: worktree")
+        self.assertEqual(c["agents"], ["a1", "a2"])
+        self.assertIn("src/x.py", c["happened"])
+
+    def test_a_cache_rebuilt_after_a_long_break_is_priced(self):
+        log = WasteLog()
+        log.calls = OrderedDict([("m1", [0.0, "claude-sonnet-5", 50_000, 0, 10, 10]),
+                                 ("m2", [4000.0, "claude-sonnet-5", 200_000, 0, 10, 10])])
+        (c,) = rule(run([], main_waste=log), "compact", table=listprices.table())
+        self.assertEqual(c["impact"]["tokens"], 200_000)
+        self.assertAlmostEqual(c["impact"]["cost"], 200_000 * (4.0 - 0.2) / 1e6)
+        self.assertIn("/compact", c["fix"]["text"])
+        self.assertEqual(c["agents"], [""])
+
+    def test_a_rebuild_after_a_model_switch_is_not_a_break(self):
+        log = WasteLog()
+        log.calls = OrderedDict([("m1", [0.0, "claude-sonnet-5", 50_000, 0, 10, 10]),
+                                 ("m2", [4000.0, "claude-opus-5", 200_000, 0, 10, 10])])
+        self.assertEqual(rule(run([], main_waste=log), "compact"), [])
+
+    def test_an_agent_without_the_project_rules(self):
+        r = run([agent("a1")], insights={"context": {"missing": [
+            {"agent_id": "a1", "label": "Agent a1", "agent_type": "general-purpose", "status": "completed",
+             "missing": ["E:/p/CLAUDE.md"]}]}})
+        (c,) = rule(r, "rules_missing")
+        self.assertIn("CLAUDE.md", c["happened"])
+        self.assertIn("omitClaudeMd", c["fix"]["text"])
 
 
 class TestCardShape(unittest.TestCase):
