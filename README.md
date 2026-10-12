@@ -23,6 +23,38 @@ agent's output became which other agent's input.
 |---|---|
 | ![Graph view, light theme](docs/evidence/screenshots/05-graph-light.png) | ![Work Floor, light theme, grouped by role](docs/evidence/screenshots/07-workfloor-by-role-light.png) |
 
+## What problem it solves
+
+When you hand work to subagents, three things go wrong that Claude Code's own output doesn't show you:
+
+1. **You don't know when you're needed.** An agent sits on a permission prompt while you're in another
+   window, and ten minutes pass. The pill and the tab icon tell you the moment an agent waits for you,
+   fails or goes quiet.
+2. **You can't see what actually happened.** Claude Code writes a separate log file for each agent,
+   spread across folders. Cuelight rebuilds the run from them: which agent handed work to which, what
+   held the run up, what each agent changed, what it cost, and what it delivered (commits, pull
+   requests, test runs).
+3. **Problems hide in the logs.** Loops, agents that edited code and never ran the tests, two agents
+   writing the same file, agents that ran without your `CLAUDE.md`, money spent rebuilding the prompt
+   cache after a break. Cuelight flags each one with the evidence.
+
+Version 0.22.0, being built on the `feature/m1` branch, adds the step after that:
+
+4. **What to change next time.** Fix-it cards turn each finding into one concrete change (the
+   `settings.json` line, the line for the agent's definition, the instruction to add) with what the
+   problem cost you in minutes and dollars. When an agent fails, the first card says why, from what
+   the record shows, or says plainly that the record doesn't show a cause.
+5. **What an agent usually costs.** From your own past runs, Cuelight learns how long each kind of
+   agent takes, what it costs and how often it fails. It warns you when a running agent goes far past
+   that, and `/cuelight:open estimate` shows those numbers to you and to Claude before you launch the
+   next one.
+
+**Isn't this just the logs in a dashboard?** The logs are the raw material, on purpose: nothing to set
+up, no proxy, no API key, and it works on runs that already happened. What Cuelight adds is what the
+logs never say outright: how the agents connect, the moments you were needed, what went wrong, and
+(from 0.22.0) what to do about it. All of it is worked out on your machine by rules you can read, with
+no AI calls and no network.
+
 ## Try it without a real run
 
 ```bash
