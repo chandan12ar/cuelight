@@ -170,7 +170,11 @@ class RunBuilder:
             # out 10 minutes to learn what the hook already told us. Transcript
             # writes after the end mean the session was resumed.
             return False
-        return (now - mtime) <= C.SESSION_LIVE_THRESHOLD_S
+        # A background subagent can keep working while the main thread sits idle, so the main
+        # transcript's mtime alone would call a busy session over. Any agent's latest entry counts too.
+        activity = self._activity_at()
+        latest = mtime if activity is None else max(mtime, activity)
+        return (now - latest) <= C.SESSION_LIVE_THRESHOLD_S
 
     def _note_main_activity(self, entries: List[dict]) -> None:
         for entry in entries:

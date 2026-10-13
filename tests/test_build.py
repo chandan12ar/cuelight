@@ -1,9 +1,11 @@
+import json
 import os
 import tempfile
 import unittest
 
 from orchestra import constants as C
 from orchestra.build import RunBuilder
+from orchestra.events import SESSION_END, Event, EventSpool
 from orchestra.parent import parse_timestamp
 from tests.fixtures import (agent_entry, build_nested_session, build_session, ts,
                             write_jsonl)
@@ -107,6 +109,41 @@ class TestBatchesAndEdges(BuildTestCase):
     def test_summary_dict_is_json_serializable(self):
         import json
         json.dumps(self.build().to_summary_dict())
+
+
+class TestBackgroundSubagentKeepsTheSessionLive(BuildTestCase):
+    """The main transcript can sit untouched while a background subagent works; its entries are activity."""
+
+    def quiet_main_session(self, agent_entry_at, spool=None, main_touched_at=None):
+        """a3 writes an entry at `agent_entry_at` seconds; the main transcript was last touched long before
+        (or at `main_touched_at`), and `now` is a minute after a3's entry."""
+        path = os.path.join(self.paths.subagents_dir, "agent-a3.jsonl")
+        with open(path, "a", encoding="utf-8") as fh:
+            fh.write(json.dumps(agent_entry([{"type": "text", "text": "still working"}], agent_entry_at)) + "\n")
+        now = parse_timestamp(ts(agent_entry_at)) + 60
+        touched = main_touched_at if main_touched_at is not None else now - 3 * C.SESSION_LIVE_THRESHOLD_S
+        os.utime(self.paths.session_jsonl, (touched, touched))
+        return RunBuilder(self.paths, now_fn=lambda: now, spool=spool).refresh()
+
+    def test_a_subagent_active_a_minute_ago_is_running_not_cut_off(self):
+        run = self.quiet_main_session(900)
+        self.assertTrue(run.session_live)
+        self.assertEqual(run.agent("a3").status, C.RUNNING)
+        self.assertEqual([c for c in run.advice["cards"] if c["rule"] == "failure"], [])
+
+    def test_a_session_nobody_touched_for_ten_minutes_is_still_over(self):
+        run = self.build(now=NOW_DEAD, live=False)         # every entry in the fixture is older than that
+        self.assertFalse(run.session_live)
+        self.assertEqual(run.agent("a3").status, C.ORPHANED)
+        self.assertEqual([c["title"] for c in run.advice["cards"] if c["rule"] == "failure"],
+                         ["Stopped when the session ended"])
+
+    def test_session_end_is_a_fact_whatever_a_subagent_wrote_after_it(self):
+        spool = EventSpool(tempfile.mkdtemp())
+        ended = parse_timestamp(ts(850))
+        spool.append(Event(kind=SESSION_END, session_id=self.paths.session_id, ts=ended, detail={"reason": "other"}))
+        run = self.quiet_main_session(900, spool=spool, main_touched_at=ended - 5)
+        self.assertFalse(run.session_live)
 
 
 class TestIncrementalRefresh(BuildTestCase):

@@ -42,10 +42,10 @@ class FleetCase(unittest.TestCase):
         os.utime(path, (mtime, mtime))
         return path
 
-    def service(self, **kw):
+    def service(self, now=NOW, **kw):
         return OrchestraService(
             root=self.root, token=TOKEN, default_session=kw.pop("default", "s1"),
-            now_fn=lambda: NOW,
+            now_fn=lambda: now,
             spool_factory=lambda: EventSpool(self.spool_dir), **kw)
 
     def permission(self, session_id, offset=145):
@@ -119,11 +119,13 @@ class TestFleet(FleetCase):
     def test_an_ended_session_is_never_urgent(self):
         self.session("s1", mtime=NOW - 99999 + 86400 * 0)   # touched long ago...
         self.permission("s1")
-        # ...but inside the fleet window, so it is listed -- and not live.
+        # ...but inside the fleet window, so it is listed -- and not live. Every agent's latest entry counts
+        # as activity too (a background agent works while the main thread is idle), so the file's time is
+        # not enough here: it is the clock that has moved on, past the newest entry of any agent.
         from orchestra import constants as C
         os.utime(os.path.join(self.root, "projects", "E--proj", "s1.jsonl"),
                  (NOW - C.SESSION_LIVE_THRESHOLD_S - 60,) * 2)
-        entry = self.service().fleet()["sessions"][0]
+        entry = self.service(now=NOW + C.SESSION_LIVE_THRESHOLD_S + 60).fleet()["sessions"][0]
         self.assertFalse(entry["session_live"])
         self.assertEqual(entry["urgency"], 0)
 
