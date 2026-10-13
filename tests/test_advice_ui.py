@@ -94,6 +94,21 @@ class TestAdviceTab(unittest.TestCase):
         hidden, text, cls = ui.run_js(FNS, CONSTS, body)
         self.assertEqual((hidden, text, cls), (False, "1", {"badge-fail": True}))
 
+    def badge_of(self, cards):
+        body = (STORAGE + "box.cls = {}; box.classList = {toggle(c, on) { box.cls[c] = on; }};\n"
+                "renderAdviceBadge(%s); console.log(JSON.stringify([box.hidden, box.textContent, box.cls]));"
+                % json.dumps(self.with_cards(cards)))
+        return ui.run_js(FNS, CONSTS, body)
+
+    def test_badge_counts_what_the_verdict_counts(self):
+        info = card(id="aaa111aaa111", severity="info", fix={"where": "none", "text": "", "snippet": ""})
+        # An information card says what happened and has nothing to change: it is not counted.
+        self.assertEqual(self.badge_of([info, card()]), [False, "1", {"badge-fail": False}])
+        self.assertEqual(self.badge_of([info])[:2], [True, "0"])
+        # A failure is counted even when there is nothing to change; any visible failure makes the badge red.
+        failure = card(id="bbb222bbb222", severity="failure", fix={"where": "none", "text": "", "snippet": ""})
+        self.assertEqual(self.badge_of([info, failure]), [False, "1", {"badge-fail": True}])
+
 
 @unittest.skipIf(ui.NODE is None, "node is not on PATH")
 class TestUsualUi(unittest.TestCase):

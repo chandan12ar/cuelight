@@ -723,6 +723,50 @@ class TestOverUsual(unittest.TestCase):
         self.assertIn("4.0x the usual $0.30", c["happened"])
         self.assertAlmostEqual(c["impact"]["cost"], 0.90)
 
+    def over_usual(self, r):
+        return [c for c in cards(r) if c["rule"] == "over_usual"]
+
+    def test_agents_nothing_explains_share_one_card_per_kind(self):
+        slow = [agent("a%d" % i, start=0.0, end=900.0, usual=usual()) for i in (1, 2, 3)]
+        (c,) = self.over_usual(run(slow))
+        self.assertEqual(c["title"], "3 agents took far longer than usual")
+        self.assertEqual(c["agents"], ["a1", "a2", "a3"])
+        self.assertAlmostEqual(c["impact"]["seconds"], 3 * 720.0)
+        self.assertIn("No other card explains it", c["fix"]["text"])
+        dear = [agent("b%d" % i, start=0.0, end=100.0, usual=usual(), cost=1.20) for i in (1, 2)]
+        (c,) = self.over_usual(run(dear))
+        self.assertEqual((c["title"], c["agents"]), ("2 agents cost far more than usual", ["b1", "b2"]))
+        self.assertAlmostEqual(c["impact"]["cost"], 2 * 0.90)
+        unpriced = [agent("c%d" % i, start=0.0, end=100.0, usual=usual(typical_cost=None, slow_cost=None),
+                          tokens={"input": 400_000, "output": 50_000}) for i in (1, 2)]
+        (c,) = self.over_usual(run(unpriced))
+        self.assertEqual((c["title"], c["impact"]["tokens"]), ("2 agents used far more tokens than usual", 2 * 374_000))
+        both = self.over_usual(run(slow + dear))               # a time card and a cost card: one each
+        self.assertEqual(sorted(c["title"] for c in both),
+                         ["2 agents cost far more than usual", "3 agents took far longer than usual"])
+
+    def test_an_agent_with_its_own_explaining_card_stays_a_separate_card(self):
+        waited = [agent("a4", start=0.0, end=900.0, usual=usual(),
+                        errors=errlog(calls=[[100.0 * i, "Bash", "pytest", True, "", same_key("pytest")]
+                                             for i in range(1, 4)]))]
+        waits = [Wait(agent_id="a4", kind=PERMISSION, start=100.0 * i + 0.5, end=100.0 * i + 30.5, state=ANSWERED)
+                 for i in range(1, 4)]
+        plain = [agent("a%d" % i, start=0.0, end=900.0, usual=usual()) for i in (1, 2, 3)]
+        out = self.over_usual(run(plain + waited, waits=waits))
+        self.assertEqual(len(out), 2)
+        merged = next(c for c in out if len(c["agents"]) == 3)
+        own = next(c for c in out if c["agents"] == ["a4"])
+        self.assertEqual(merged["title"], "3 agents took far longer than usual")
+        self.assertIn("No other card explains it", merged["fix"]["text"])
+        self.assertEqual(own["title"], "Took far longer than usual")
+        self.assertEqual(own["fix"]["text"], "Other cards here explain part of it: Pre-approve a command you kept approving.")
+
+    def test_a_card_that_merges_has_a_stable_id_whatever_its_agents(self):
+        one = self.over_usual(run([agent("a1", start=0.0, end=900.0, usual=usual())]))[0]
+        three = self.over_usual(run([agent("a%d" % i, start=0.0, end=900.0, usual=usual()) for i in (1, 2, 3)]))[0]
+        self.assertEqual(three["title"], "3 agents took far longer than usual")
+        self.assertEqual(one["id"], three["id"])        # so hiding it stays hidden as agents are added
+
     def unpriced(self, tokens, **kw):
         return agent(start=0.0, end=100.0, usual=usual(typical_cost=None, slow_cost=None), tokens=tokens, **kw)
 

@@ -144,7 +144,7 @@ def _finish(card: Dict[str, Any]) -> Dict[str, Any]:
 def _select(cards: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     """Merged, filtered, ordered and capped, then explained: what the reader sees. An over-usual card
     points only to cards that are shown, never to one filtered out or cut by the cap."""
-    shown = sorted((c for c in _merge(cards) if _worth_showing(c)), key=_order)[:MAX_CARDS]
+    shown = sorted((c for c in _merge(_group_unexplained(cards)) if _worth_showing(c)), key=_order)[:MAX_CARDS]
     _explain_over_usual(shown)
     return [_finish(c) for c in shown]
 
@@ -678,6 +678,24 @@ def _explain_over_usual(cards: List[Dict[str, Any]]) -> None:
         others = list(dict.fromkeys(titles))
         card["fix"]["text"] = ("Other cards here explain part of it: " + "; ".join(others) + "." if others else
                                "No other card explains it. Open the agent and look at its longest tool calls.")
+
+
+UNEXPLAINED_MANY = {"time": "{n} agents took far longer than usual", "cost": "{n} agents cost far more than usual",
+                    "tokens": "{n} agents used far more tokens than usual"}
+
+
+def _group_unexplained(cards: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Over-usual cards that no raw card can explain say the same thing about different agents, so they
+    share one key per kind and merge into one card. One that something explains stays its own card, which
+    names what explains it."""
+    out = []
+    for card in cards:
+        kind = card.get("over")
+        if card["rule"] == "over_usual" and kind in EXPLAINS and not any(
+                c["rule"] in EXPLAINS[kind] and set(c["agents"]) & set(card["agents"]) for c in cards):
+            card = dict(card, key="over_usual:{}:unexplained".format(kind), title_many=UNEXPLAINED_MANY[kind])
+        out.append(card)
+    return out
 
 
 def _slow(run: Any, now: float) -> List[Dict[str, Any]]:

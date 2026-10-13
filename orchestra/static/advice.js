@@ -130,7 +130,9 @@ function renderAdviceBadge(run) {
   const badge = $("advice-badge");
   if (!badge) return;
   const hidden = adviceHidden();
-  const cards = ((run.advice && run.advice.cards) || []).filter((c) => hidden.indexOf(c.id) < 0);
+  // What the verdict counts: a failure, or a card with something to change. Not an information card.
+  const cards = ((run.advice && run.advice.cards) || []).filter((c) => hidden.indexOf(c.id) < 0 &&
+    (c.severity === "failure" || !(c.fix && c.fix.where === "none")));
   badge.hidden = !cards.length;
   badge.textContent = String(cards.length);
   if (badge.classList) badge.classList.toggle("badge-fail", cards.some((c) => c.severity === "failure"));
