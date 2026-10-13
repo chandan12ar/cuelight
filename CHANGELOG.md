@@ -43,8 +43,10 @@ agent usually costs. All of it is worked out on your machine by rules, with no A
 - **Dollars out of the box.** Anthropic's public list prices are built in (`orchestra/listprices.py`, dated
   2026-10-12) and used when you have no price file of your own. The header total shows "(list price)" (the date
   is in its tooltip), the Agents tab's cost column says "Cost (list price)" (date in its tooltip), and the Spend
-  tab, the Advice tab and the two commands say "list price, as of 2026-10-12". `ORCHESTRA_PRICES=off` shows
-  tokens only.
+  tab and the Advice tab say "list price, as of 2026-10-12". The two commands print "Dollar figures use
+  Anthropic list prices as of 2026-10-12." (advise) and "Costs use Anthropic list prices as of 2026-10-12."
+  (estimate), and the verdict line marks the total "(list price)" without a date. `ORCHESTRA_PRICES=off`
+  shows tokens only.
 
 ### Changed
 - Your own price file still wins, and a price file that cannot be read is reported, not replaced by list

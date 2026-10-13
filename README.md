@@ -458,9 +458,10 @@ Cuelight shows what a run cost out of the box, using **Anthropic's public list
 prices**. They are built in, dated (`orchestra/listprices.py` says when they were
 checked, currently 2026-10-12) and used only when you have no price file of your own. They are labelled in
 these places: the header total shows "(list price)" with "list price, as of" the date in its tooltip; the
-Agents tab's cost column header says "Cost (list price)" with the date in its tooltip; and the Spend tab,
-the Advice tab and the two commands that print advice and estimates say "list price, as of" the date. Not
-labelled yet: the Insights numbers, the agent panel's cost row, the Spend by-agent and by-model tables, the
+Agents tab's cost column header says "Cost (list price)" with the date in its tooltip; and the Spend tab
+and the Advice tab say "list price, as of" the date. The command line says "Dollar figures use Anthropic
+list prices as of <date>." above the advice and "Costs use Anthropic list prices as of <date>." above the
+estimates, and the verdict line marks the total "(list price)" without the date. Not labelled yet: the Insights numbers, the agent panel's cost row, the Spend by-agent and by-model tables, the
 History totals and the CSV and JSON exports (the JSON export says where its prices came from).
 
 - **Your own prices win.** Prices differ by contract and change over time. Copy

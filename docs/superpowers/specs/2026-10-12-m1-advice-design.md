@@ -268,8 +268,11 @@ where the two disagree, this section is right.
   name is stored.
 - **Prices.** Cache writes are priced at the one-hour rate and Claude Haiku 5.5 at its over-100K rate, so
   list-priced figures lean high. A price file that cannot be read is reported, not replaced by list prices.
-  The "list price, as of" label is on the header total, the Spend tab, the Agents tab, the Advice tab and the
-  two commands; not yet on the Insights numbers, the agent panel, the Spend by-agent and by-model tables,
+  The dashboard labels are: " (list price)" on the header total and "Cost (list price)" on the Agents tab's
+  cost column (each with "list price, as of <date>" in its tooltip), and "list price, as of <date>" on the
+  Spend tab and the Advice tab. The command line says "Dollar figures use Anthropic list prices as of <date>."
+  (advise) and "Costs use Anthropic list prices as of <date>." (estimate), and the verdict line marks the total
+  " (list price)" without a date. Not yet labelled: the Insights numbers, the agent panel, the Spend by-agent and by-model tables,
   History totals and CSV/JSON exports (the JSON carries where its prices came from).
 - **Failure cards.** An API error is the cause only when it was not recovered from. "Ran out of context" is
   `sure` when a compaction is recorded and `possible` when only the assumed window's fill reached 95%; loops
@@ -298,7 +301,7 @@ where the two disagree, this section is right.
 - **Always shown.** Failure, unchecked-work, same-file and missing-rules cards show whatever their size, since
   their cost is a risk; so does a pre-approve card with 3 or more prompts.
 - **Carried but not shown.** The skipped-tests rate is in the payload, not on screen.
-- **Smaller shape changes.** A card's `impact` is `{seconds, tokens, cost, label}`; the currency and where
-  the prices came from (`priced_by`, `as_of`) are on the advice block, not on each card. `estimate` prints one
+- **Smaller shape changes.** A card's `impact` is `{seconds, tokens, cost, label}`; the currency is on the
+  cost block (`run.cost`), and the advice block carries `priced_by` and `as_of`, not each card. `estimate` prints one
   table for the project and all projects together, with a "from" column saying which a row used. The "Your
   usual" table on the Advice tab has a Tokens column as well as time and cost.

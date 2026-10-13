@@ -1224,9 +1224,12 @@ pure functions in `app.js`, tested under node.
   short-prompt rate. Models without a row (Opus 4.5 and earlier, Sonnet 4.5 and earlier) stay unpriced
   and are listed as such. `CHEAPER` maps a family to the cheaper model the advice suggests (Opus to
   Sonnet, Sonnet to Haiku) and the model id it is priced as.
-- **Labels.** A list-priced figure says "list price, as of <date>" in the Spend tab, the header total
-  (" (list price)", with the date in its tooltip), the Agents tab's cost column, the Advice tab and
-  `--advise`/`--estimate` (`priceNote` in `app.js`). Not labelled yet: the Insights numbers, the agent
+- **Labels.** In the dashboard, `priceNote` in `app.js` gives "list price, as of <date>", used by the Spend
+  tab and the Advice tab; the header total says " (list price)" with that text in its tooltip, and the Agents
+  tab's cost column header says "Cost (list price)" with it in its tooltip. The command line does not use
+  `priceNote`: `advice.render_text` prints "Dollar figures use Anthropic list prices as of <date>.",
+  `baselines.render_estimate` prints "Costs use Anthropic list prices as of <date>.", and the verdict line
+  marks the total " (list price)" with no date. Not labelled yet: the Insights numbers, the agent
   panel's cost row, the Spend by-agent and by-model tables, CSV/JSON exports (the JSON carries
   `cost.source` and `cost.as_of`) and History totals.
 
