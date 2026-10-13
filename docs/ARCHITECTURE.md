@@ -86,6 +86,8 @@ Why it is shaped this way:
 | `/cuelight:open` | `cuelight` | Starts the dashboard server (if not already running for this session) and opens the URL |
 | `/cuelight:open stop` | `cuelight --stop` | Kills the server process for this session |
 | `/cuelight:open report` | `cuelight --report .` | Writes one self-contained `.html` file — no server needed to view it |
+| `/cuelight:open advise` | `cuelight --advise` | Prints the run's verdict, its fix-it cards (with the text to copy) and a short fact sheet, then exits. `commands/open.md` tells Claude to show it and not to change any file unless the user asks |
+| `/cuelight:open estimate` | `cuelight --estimate` | Prints what each kind of agent usually takes (time, tokens, cost, fail rate) from the user's past sessions, then exits |
 
 ### What `--session` actually does under the hood
 
@@ -444,8 +446,11 @@ base64-encodes it into `window.ORCHESTRA_AGENT_SPRITE` as a `data:` URI
 instead.
 
 ### `__main__.py` — the CLI
-`start` / `stop` / `report` / the hidden `--serve` (what the detached child
-process actually runs). Covered in [§2](#2-how-you-run-it--the-cuelightopen-slash-command).
+`start` / `stop` / `report` / `--export` / `--advise` / `--estimate` / the hidden `--serve` (what the
+detached child process actually runs). Covered in [§2](#2-how-you-run-it--the-cuelightopen-slash-command).
+`--advise` builds the run once with the past-runs numbers (`cmd_advise`: a foreground scan, cached after
+the first time) and prints `advice.render_text`; `--estimate` prints `baselines.render_estimate`. Both print
+through `_print_safe`, which turns a character the console's code page lacks into `?` instead of failing.
 
 ---
 
@@ -455,12 +460,12 @@ No build step, no framework, no dependency — `app.js` (plus `tabs.js`, below),
 `style.css`, one `index.html`, plain `fetch`/DOM/SVG APIs. The code is organized
 around one `state` object and one `render()` dispatcher:
 
-`tabs.js` holds the views that are tabs of their own (Prompts, Agents, Spend). It is a
-second classic script loaded after `app.js`, so it shares `app.js`'s top-level globals
+`tabs.js` holds the views that are tabs of their own (Prompts, Agents, Spend), and `advice.js`
+the Advice tab (below). Each is a classic script loaded after `app.js`, so it shares `app.js`'s top-level globals
 (`state`, `esc`, `insCard`, `openDrawer`...) and `render()` calls into it. It exists
 because the plugin directory takes no non-image file over 256 KiB and `app.js` reached
-that limit in 0.19.0. The static report inlines both, in that order; `tests/test_insights_ui.run_js`
-reads both, so a test can extract a function from either file.
+that limit in 0.19.0. The static report inlines all three, in that order (`app.js`, `tabs.js`, `advice.js`);
+`tests/test_insights_ui.run_js` reads all of them, so a test can extract a function from any file.
 
 ```js
 state = {
@@ -493,15 +498,15 @@ control on each poll, which drops keyboard focus to the page. Each such view (Pr
 Agents, Spend, Work Floor, Fleet, History) calls `noteFocus(box)` before writing its markup and
 `restoreFocus(box, spot)` after binding its handlers. `noteFocus` names the focused control by the
 first of `FOCUS_NAMES` it carries (`data-agent`, `data-session`, `data-prompt`, `data-fold`,
-`data-jump`, `data-view`, `data-sort`, `data-split`), a `<summary>` by its `<details>`, and a control
+`data-jump`, `data-view`, `data-sort`, `data-split`, `data-copy`, `data-hide`), a `<summary>` by its `<details>`, and a control
 with none of them by its tag and first class (the Fold all button, the "needs a look" toggle, the Spend
 chart), plus which of the matches it was (an agent can be named twice in one view). A control that is
 gone after the redraw leaves focus where it fell rather than moving it somewhere unexpected.
 `tests/test_focus_ui.py` redraws each view over a small parsing DOM stub and checks focus lands on the
 same control.
 
-**Keyboard shortcuts** (`onGlobalKey`, on `document`). Number keys `1`-`9`, `0` switch to the ten views in
-tab order (`PALETTE_VIEWS`); letters run commands. None fire with a modifier, while typing in a field, with
+**Keyboard shortcuts** (`onGlobalKey`, on `document`). Number keys `1`-`9`, `0` switch to the first ten views in
+tab order (`PALETTE_VIEWS`); `A` opens the eleventh, Advice; letters run commands. None fire with a modifier, while typing in a field, with
 the palette or help open, or for a key a focused control already handled (`event.defaultPrevented`): the
 graph's own handler fits it on `0`, which before 0.21.3 also jumped to History.
 
@@ -765,7 +770,13 @@ tab correctly shows its empty state rather than pretending to be live.)
   which greps for external `src`/`href`/`fetch` and fails the build if it
   finds one).
 - **Never touches `~/.claude`.** Cuelight only *reads* transcripts; nothing
-  it does writes back into Claude Code's own state.
+  it does writes back into Claude Code's own state. Since 0.22.0 it also reads
+  past sessions in every project (read-only, `baselines.py`) and keeps numbers
+  only, in its own state directory (`baselines-v2.json`, mode `0600`).
+- **Advice never acts.** The fix-it cards (`advice.py`) are text to copy.
+  Nothing in Cuelight writes a settings file, an agent definition or a
+  `CLAUDE.md`, and `commands/open.md` tells Claude not to change a file
+  because of `advise` unless the user asks.
 - **Redacted at the one chokepoint** — see [`redact.py`](#redactpy--the-one-chokepoint-everything-passes-through)
   above.
 - **Path-traversal guarded.** Static file serving resolves the real path
@@ -781,7 +792,7 @@ tab correctly shows its empty state rather than pretending to be live.)
 python -m unittest discover -s tests -t . -v
 ```
 
-Standard library only (`unittest`), 650+ tests, no external dependencies.
+Standard library only (`unittest`), about 1,340 tests, no external dependencies.
 Coverage spans: every backend module's pure logic (fixture-built fake
 sessions, no real transcripts needed), the HTTP server's routing and auth
 checks, the static-asset invariants (no network egress, every `$("id")`
@@ -793,6 +804,14 @@ rather than throwing. That last one exists because of exactly the failure
 mode it's named for: a missing DOM id, or a browser-only API call, can make
 `app.js` throw before it draws anything while every *text-based* assertion
 about the page still passes.
+
+The advice layer has its own files: `tests/test_advice.py` (every rung of the failure ladder and every
+rule at its trigger, below its threshold and merged; the pre-approve safety checks; the verdict and
+the order), `tests/test_baselines.py` (grouping, the project then all then not-enough fallback, median
+and 90th percentile, cache reuse, refresh, drop, corrupt and old caches, the private file mode, numbers
+only), `tests/test_listprices.py` (precedence, `off`, a broken file, the labels) and
+`tests/test_advice_ui.py` (the tab under the Node DOM stub: escaping, Copy, Hide, the badge, the `A` key,
+focus kept across a redraw, the usual table).
 
 ---
 
@@ -842,7 +861,8 @@ pure functions in `app.js`, tested under node.
   content block, each repeating the message's usage (a real transcript: 271
   entries, 103 messages), so summing per entry inflated every token count
   2.6-3.1x. `apply_usage` keys on `message.id`; tokens are also kept per model.
-- **Cost** needs a user-supplied price file (none built in — prices change). It
+- **Cost** uses the user's price file when there is one, else the built-in dated list prices
+  (`listprices.py`, below); `ORCHESTRA_PRICES=off` turns it off. It
   covers the orchestrator's own transcript (`TokenTally`) and each agent priced
   per model; unpriced models mark the total *partial*; `ORCHESTRA_BUDGET` warns
   at 80 % and alerts when exceeded.
@@ -1188,6 +1208,133 @@ pure functions in `app.js`, tested under node.
   follows the pointer or the arrow keys (Home/End, PageUp/PageDown); a live redraw puts the reading
   and focus back. The Insights Spend card moved here; its glance chip carries `view: "spend"`.
 
+### List prices (`listprices.py`, `pricing.py`)
+- **Precedence.** `pricing.default_source()` is a `PriceSource` whose fallback is `listprices.table()`.
+  `PriceSource.get()` returns, in order: nothing when `ORCHESTRA_PRICES=off` (tokens only, no list
+  prices); the user's file when it exists and parses; no table and an `error` string when it exists
+  but is broken (a broken file is reported, never quietly replaced by list prices); else the list
+  prices. `PriceTable` now carries `source` (`"yours"` or `"list"`) and `as_of`; the cost block in
+  the payload carries both, so a client can label a figure.
+- **The table.** `listprices.MODELS` (first match wins, so a model's own row comes before its family's)
+  holds Anthropic's public list prices per million tokens, checked on `AS_OF` (2026-10-12) against
+  `SOURCE`, never from memory. Two choices keep it from understating: cache writes are priced at the
+  one-hour rate (2x input), because most Claude Code cache writes are one-hour writes (72% in the
+  transcripts it was checked against), and Claude Haiku 5.5 at its over-100K-prompt rate, five times its
+  short-prompt rate. Models without a row (Opus 4.5 and earlier, Sonnet 4.5 and earlier) stay unpriced
+  and are listed as such. `CHEAPER` maps a family to the cheaper model the advice suggests (Opus to
+  Sonnet, Sonnet to Haiku) and the model id it is priced as.
+- **Labels.** A list-priced figure says "list price, as of <date>" in the Spend tab, the header total
+  (" (list price)", with the date in its tooltip), the Agents tab's cost column, the Advice tab and
+  `--advise`/`--estimate` (`priceNote` in `app.js`). Not labelled yet: the Insights numbers, the agent
+  panel's cost row, the Spend by-agent and by-model tables, CSV/JSON exports (the JSON carries
+  `cost.source` and `cost.as_of`) and History totals.
+
+### Advice (`advice.py`, `advice.js`)
+`advice.compute(run, now, table)` is a pure function of a `Run` (no I/O, bounded output, every
+transcript-derived string passed through `scrub`). `RunBuilder.refresh` calls it last and puts the result
+on `run.advice`: `{parts, cards, slow, failures, priced_by, as_of}`. Cuelight never applies a fix; a
+card's snippet is text to copy. Its own text is ASCII, so the command line prints on any console.
+
+- **A card** is `{id, rule, tag, severity, title, happened, agents, impact, fix}`. `id` is a hash of the
+  card's merge key (what the per-browser Hide remembers); `tag` is `sure` (a fact in the record) or
+  `possible` (a judgment the record cannot settle); `severity` is `failure`, `fix`, or `info` (it reports
+  something and has nothing to change); `impact` is `{seconds, tokens, cost, label}`; `fix` is
+  `{where, text, snippet}` with `where` one of settings, agent, claude_md, instructions, habit, none.
+- **Failure ladder** (`_failure`: one card per agent that ended `failed`, `orphaned` or `stalled`). The
+  first match wins: (1) an API error as the agent's last entry, or within 2 minutes of its end, and not
+  recovered from (usage limit, expired login, server error, overloaded); (2) its latest call failed
+  `STUCK_AFTER` (3) times in a row; (3) its last command ran past its timeout and was not moved to the
+  background; (4) it ran out of context: `sure` when a compaction is recorded, `possible` when only the
+  assumed window's fill reached `CONTEXT_FULL` (95%); (5) a possible loop (`detect_loop`); (6) it was
+  cut off when the session ended or was still in a tool call, or, for a stalled agent with a call open,
+  "went quiet during a tool call"; (7) "No cause in the record", with its last three calls. Cards with
+  the same cause and fix in several agents (the API error kind, context, loop, session ended) merge.
+- **Rules** (each `fn(run, now, table) -> [card]`, listed in `RULES`):
+
+  | Rule | Fires when | Tag |
+  |---|---|---|
+  | `verify` | A **completed** agent's checks are `unchecked` after code edits, or `failing`. A failing card is keyed by its own command; the command in a snippet is its first line only, never a cut-off one | sure |
+  | `worktree` | One file was written by agents that **overlapped in time** (`_overlapped`: an agent still running runs until now; one with no known start counts as overlapping). Writers that took turns are a handoff, so no card | sure |
+  | `compact` | Cache rebuilds after an idle gap (`idle_long`, `idle_short`), main session and agents, with the extra cost over the cache-read price | sure |
+  | `rules_missing` | An agent lacks instruction files the main session had; the text mentions `omitClaudeMd` | sure |
+  | `preapprove` | Permission waits grouped by the command prefix or web domain they were about (below) | sure |
+  | `cheaper_model` | A completed agent on Opus or Sonnet made 3 or more calls, all read/search tools, and the same tokens at the cheaper model's prices save at least $0.05 and 30% | possible |
+  | `parallel` | Agents of one parent ran one after another: each launched within `PARALLEL_GAP_S` (120 s) of the previous one ending, with no prompt between, not in one launch batch, and no edge or shared file between them. All groups merge into one card; the saving is the sum of durations minus the longest | possible |
+  | `over_usual` | A completed agent over its usual 90th percentile **and** over 2x its typical value (`OVER_RATIO`): time first, else cost, else fresh tokens (used when the agent or its usual has no cost). Needs a usual with enough runs | sure |
+
+- **Pre-approve** (`_preapprove_cards`). A wait is matched to the tool call open when it began (the latest
+  call at or before its start). Questions Claude asks on purpose (`AskUserQuestion`, `ExitPlanMode`) never
+  count. A rule is suggested only for a Bash command whose **whole** text is known (the error log keeps a
+  hash of the full value; `_is_whole`) that starts with a prefix in `SAFE_PREFIXES` (npm, pnpm and yarn
+  test, lint and build scripts, pytest, `python -m pytest` and `unittest`, go test/build/vet, cargo
+  test/check/build/clippy, make test/check/lint, ruff check, mypy, tsc, eslint) and contains none of
+  `; & | > <`, a backtick, `$(` or a line break; and for a WebFetch URL that passes a strict host check
+  (`_host`: no backslash or `@`, a dotted name whose last label is alphabetic, no IP literal, no
+  `localhost`, under `TARGET_CUT` (160) characters and on one line, since a longer URL was cut by the log).
+  The card says how far the rule reaches (`SCOPE`: "allows any arguments, and runs code from your
+  project", or "any page on that domain"). Anything else gets a report-only `info` card with no snippet.
+  `git status`, `diff` and `log` are not on the list: Claude Code never asks about them.
+- **Thresholds, merge, order** (`_select`). Over-usual cards that no raw card can explain merge by kind
+  (`_group_unexplained`); then cards with the same `key` merge (agents joined, impacts added, "and N more
+  like it"). A card is kept when its impact is at least `MIN_SECONDS` (60), `MIN_TOKENS` (10,000) or
+  `MIN_COST` ($0.05), or when it is a risk that always shows (`always`: failure, verify, worktree and
+  rules_missing cards, and a pre-approve card with `PROMPTS_ENOUGH` (3) or more prompts). Order is severity
+  (failure, then fix, then info), then cost, seconds and tokens; at most `MAX_CARDS` (12). Only then does
+  `_explain_over_usual` write each over-usual card's text, so it names only cards that are shown and can
+  explain it (a time overage: a pre-approve card, time spent waiting on you; a cost or tokens overage: a
+  rebuilt-cache or pre-approve card), or says that no other card explains it.
+- **Verdict** (`_verdict_parts`): agents (and how many failed or were cut off), commits and PRs, tests
+  passed or "N of M test runs failed", the cost with " (list price)" when it is one, and "N things to
+  fix". That count is the failure cards plus the cards with a real fix (`fix.where != "none"`), so an
+  information card is not counted. `advice.js` counts the tab badge the same way (minus hidden cards) and
+  makes it red when a failure card is shown.
+- **Slow** (`_slow`): running or waiting agents past their kind's slow case and over 2x typical, for the
+  Health box's SLOWER THAN USUAL. Not shown while replaying.
+- **`--advise` text** (`render_text`): the verdict, a note when dollars are list prices, each card (title,
+  tag, what happened, what it cost, where the fix goes, the snippet) and `fact_sheet` (at most 60 lines:
+  wall time, one line per agent, top tools, conflicts, links, commits and PRs).
+- **The tab** (`advice.js`, loaded after `tabs.js`). `renderAdvice` draws the verdict with a Copy button,
+  the cards (escaped; agent chips open the agent panel; Copy puts the snippet on the clipboard and says
+  "Copied!" or "Copy failed") and "Your usual". Hide keeps card ids in `localStorage`
+  (`cuelight-advice-hidden`, in try/catch, capped at 200); a button under the cards shows or re-hides them.
+  A replay shows a note instead, since advice describes the whole session. Keyboard focus survives a
+  redraw (`noteFocus`/`restoreFocus`, with `data-copy` and `data-hide` in `FOCUS_NAMES`).
+
+### Usual numbers (`baselines.py`, `/api/usual`)
+- **Scan.** `Baselines.scan` walks every project under Claude Code's projects folder, read-only, and
+  builds each past session with the same `RunBuilder`, keeping a row per finished agent (`completed`,
+  `failed` or `orphaned`). `Baselines.start` runs it in a daemon thread when the dashboard starts, so the
+  page opens at once (about 7 s for 57 sessions and 305 MB the first time; then cached); `start_if_stale`
+  rescans every 10 minutes, after an answer has been sent. `--advise` and `--estimate` scan in the
+  foreground. Errors are swallowed: a session that fails to read is skipped and tried again next scan, and a
+  failing scan keeps the numbers already read and reports `state: "error"`.
+- **A row is numbers only:** session id, a 12-character hash of the project folder name, agent type, model
+  family, status, start, duration (`None` for an agent cut off before it ended, which still counts toward
+  the fail rate), tokens by model and kind (so cost is priced when read and a price change needs no
+  rescan), tool-call count, edited, check state, loop, seconds waited. No prompts, briefs, results, paths or
+  commands (`test_rows_are_numbers_only_for_finished_agents` pins the shape).
+- **Cache.** `<state dir>/baselines-v2.json` (`VERSION = 2`, mode `0600`, a temp file then `os.replace`).
+  One entry per session, with a fingerprint (name, size and mtime of the main transcript and every
+  `agent-*` file). A session whose fingerprint matches is reused; a changed one is read again; one that has
+  disappeared drops out. A session that still had an unfinished agent (running, waiting or stalled) when
+  it was read is stored with no fingerprint, so the next scan reads it again: whether an agent is running
+  or cut off depends on the clock, and a dead session's files never change. A corrupt, old or wrongly
+  shaped cache is ignored. The version went to 2 when cut-off agents became rows.
+- **Usual** for an agent type and model family (`usual_for`): this project's finished runs when there are
+  at least `MIN_RUNS` (5) and one of them timed, else all projects' runs when there are, else
+  `enough: false` ("not enough past runs yet (n)"). Typical is the median and slow case the 90th
+  percentile of time, fresh tokens and cost (from the runs that ended; a run on an unpriced model is left
+  out of the cost figures, not counted as free). `fail_rate` is the share of failed and cut-off runs;
+  `unchecked_rate` is the share of runs that edited code and were `unchecked` (carried in the payload, not
+  shown on screen). The current session is left out. `RunBuilder` asks once per type and model and sets
+  `agent.usual`.
+- **Where it shows.** The agent panel's "usual" row (`usualText`), the Health box, the Advice tab's "Your
+  usual" table (not in a static report, which has no other sessions to learn from), `render_estimate`
+  (`--estimate`), and `GET /api/usual` (`service.usual`, behind the same Host, Origin and token checks as
+  every route): `{state, error, sessions, agents, groups, source, as_of, currency}` for this session's
+  project. The Advice tab asks for it when opened, and again every 3 seconds while `state` is `scanning`;
+  an answer for a session that is no longer the current one is dropped.
+
 ### Graph and Work Floor
 - **Graph layout** (`layoutGraph`) is a pure function split into `graphRankColumns`
   (longest path over exact edges; columns indexed, never raw rank), `graphOrderColumns`
@@ -1254,13 +1401,18 @@ orchestra/
   insights.py       run-level analytics: parallelism, critical path, tools, tokens, files
   search.py         agents / tool calls / files search over the scrubbed run
   demo.py           the synthetic 13-agent run behind --demo
-  pricing.py        user-supplied price table -> cost
+  pricing.py        price table (your file, else the list prices) -> cost
+  listprices.py     Anthropic's public list prices, dated
+  advice.py         fix-it cards, failure causes, verdict, the --advise text
+  baselines.py      what each kind of agent usually takes, from past sessions
   runaway.py        possible-loop detection
   export.py         CSV / JSON export
   history.py        opt-in run-metrics history (sqlite)
   static/
     index.html      page shell (live server)
-    app.js          the entire frontend: polling, rendering, interaction
+    app.js          the frontend: polling, rendering, interaction
+    tabs.js         the Prompts, Agents and Spend tabs
+    advice.js       the Advice tab
     style.css       theming (light/dark), layout, all visual language
     agent-sprite.png  Work Floor's character sheet (MIT-licensed, from
                       ntd4996/agentpet — see §7's "Work Floor" entry)

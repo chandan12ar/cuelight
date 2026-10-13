@@ -38,7 +38,7 @@ When you hand work to subagents, three things go wrong that Claude Code's own ou
    writing the same file, agents that ran without your `CLAUDE.md`, money spent rebuilding the prompt
    cache after a break. Cuelight flags each one with the evidence.
 
-Version 0.22.0, being built on the `feature/m1` branch, adds the step after that:
+Since 0.22.0 it also tells you what to do about it:
 
 4. **What to change next time.** Fix-it cards turn each finding into one concrete change (the
    `settings.json` line, the line for the agent's definition, the instruction to add) with what the
@@ -52,7 +52,7 @@ Version 0.22.0, being built on the `feature/m1` branch, adds the step after that
 **Isn't this just the logs in a dashboard?** The logs are the raw material, on purpose: nothing to set
 up, no proxy, no API key, and it works on runs that already happened. What Cuelight adds is what the
 logs never say outright: how the agents connect, the moments you were needed, what went wrong, and
-(from 0.22.0) what to do about it. All of it is worked out on your machine by rules you can read, with
+what to do about it. All of it is worked out on your machine by rules you can read, with
 no AI calls and no network.
 
 ## Try it without a real run
@@ -83,12 +83,15 @@ Requires Python 3.9 or newer. Nothing else — no pip install, no npm, no build.
 | `/cuelight:open` | Start the dashboard and open it |
 | `/cuelight:open stop` | Shut the server down |
 | `/cuelight:open report` | Write a self-contained HTML snapshot you can share |
+| `/cuelight:open advise` | Print what to change next time: the run's verdict, its fix-it cards and a short fact sheet Claude can answer follow-up questions from |
+| `/cuelight:open estimate` | Print what each kind of agent usually takes (time, tokens, cost, how often it fails) from your past sessions, to check before you launch more |
 
 From a terminal, outside Claude Code:
 `python -m orchestra --session <id> --export csv|json [--out PATH]` writes the
 run as CSV (one row per agent) or JSON. The dashboard's **Export** menu does the
 same. Exports contain only what the dashboard shows (already redacted), and CSV
-cells a spreadsheet would execute as formulas are neutralised.
+cells a spreadsheet would execute as formulas are neutralised. `python -m orchestra --advise` and
+`--estimate` (with `--session <id>` to pick a session) print what the two commands above print.
 
 ## Example use cases
 
@@ -135,8 +138,83 @@ cells a spreadsheet would execute as formulas are neutralised.
     answered again, which tools failed most, which failed calls were tried again and whether that
     worked, and commands that ran past their timeout. An agent still failing the same call three times
     in a row goes in the Health box.
+17. **Know why an agent failed.** The first card on the Advice tab says why, from what the record shows (a
+    usage limit, an expired login, a call that failed three times in a row, a command past its timeout, a
+    context that filled up, a loop), what the agent had spent by then, and the change to make. When the
+    record shows no cause it says so, with the agent's last three calls, instead of guessing.
+18. **Know what an agent will cost before you launch it.** `/cuelight:open estimate` lists, for each kind of
+    agent and model you have used, how long it usually takes, how many tokens and how much money, and how
+    often it fails, from your own past sessions. Claude can read it before it picks an agent type and a
+    model.
 
 You can try every one of these without a real run: `python -m orchestra --demo`.
+
+## Advice: what to change next time
+
+The **Advice** tab (shortcut `A`) turns what Cuelight found into changes you can make. It is worked out on
+your machine by rules you can read in `orchestra/advice.py`: no AI call, no network.
+
+- **The verdict** is one line you can copy, for example `8 agents, 1 failed · 2 commits, 1 PR · tests
+  passed · $3.10 (list price) · 3 things to fix`. A part with nothing to say is left out. "Things to fix"
+  counts the failures and the cards that have a change to make, not the cards that only report.
+- **A card** has a tag, a title, what happened (with the agents it concerns, each one opens its panel),
+  what it cost you in minutes, tokens and dollars, and the change: where it goes (`settings.json`, the
+  agent's definition, your instructions, a habit) and, where there is one, the exact text, with a **Copy**
+  button. **Hide** puts a card away in this browser only; a button under the cards shows how many are hidden
+  and brings them back. A card tagged **sure** is a fact in the record; one tagged **possible** is a
+  judgment the record cannot settle. A card needs at least a minute, 10,000 tokens or five cents to show,
+  except the ones that are a risk rather than a cost (a failure, work nobody checked, a shared file,
+  missing rules). At most 12 show, failures first.
+- **Cuelight never applies a fix.** A snippet is text to copy. The command that prints the advice tells
+  Claude not to change any file unless you ask it to.
+
+**When an agent fails, the first card says why.** The first of these the record shows is the cause:
+
+1. an API error at the end that it did not recover from: a usage limit (wait, then resume), an expired login
+   (`/login`), a server error or an overloaded API (run it again);
+2. a call that failed three times in a row (with an instruction line so it stops and reports instead);
+3. its last command ran past its timeout (run long commands in the background, or raise the Bash timeout);
+4. it ran out of context (split the task). This is "sure" when Claude Code recorded a compaction and
+   "possible" when only the assumed window's fill reached 95%;
+5. it went in circles, repeating a step (give it a stop condition). Always "possible";
+6. it was cut off when the session ended or was still in a tool call (nothing to fix; resume it), or it went
+   quiet during a tool call (it may still be running a long command);
+7. none of these: "No cause in the record", with its last three calls.
+
+Failures with the same cause and the same fix in several agents (the same API error, ran out of context,
+went in circles, stopped when the session ended) share one card.
+
+**What else it looks for:**
+
+| Card | Fires when | The change |
+|---|---|---|
+| Finished with checks failing, or reported done without running the tests | A completed agent edited code and ran no test, build or lint after its last edit, or its last check failed | A line for its instructions naming the check this run used |
+| Agents wrote the same file | Two or more agents **running at the same time** wrote one file. Agents that took turns are a handoff, not a conflict | `isolation: worktree` for their definitions |
+| The cache was rebuilt after a break | The prompt cache was written again from scratch after an idle gap | `/compact` before a long break, or `/clear` |
+| An agent ran without your project rules | An agent did not load rules files the main session had | Name them in its instructions or definition (if its definition sets `omitClaudeMd: true` this is expected) |
+| Pre-approve a command you kept approving | Permission prompts for the same test, build or lint command, or the same web domain, cost you a minute or came three or more times. Questions Claude asks you on purpose never count | A `permissions.allow` entry |
+| A cheaper model would likely have done (possible) | A finished agent only read and searched, on Opus or Sonnet, and the same tokens on the next cheaper model would have saved at least 30% and five cents | `model: sonnet` or `model: haiku` for its definition |
+| These agents could have run together (possible) | Agents of one parent ran one after another, each launched within two minutes of the previous one ending, with no prompt, handoff or shared file between them | Launch them in one message |
+| Took far longer than usual | A finished agent was past the 90th percentile of its kind and over twice the typical run (cost, or tokens when unpriced, the same way) | Names the cards that can explain it, or says none does |
+
+The pre-approve card is the one to read twice. It suggests a rule only for test, build and lint commands
+(npm, pnpm and yarn test, lint and build scripts, pytest, `python -m unittest`, go, cargo, make test and
+lint, ruff, mypy, tsc, eslint) run as a single plain command, and for web domains, and it says how far the
+rule reaches. **Pre-approving a test or build command runs whatever that command runs in your project
+(its tests, its build scripts), with any arguments, without asking again.** A command with `;`, `&`, `|`,
+a redirect or a substitution, any other command, and any domain that is not a plain name (an address,
+`localhost`, a name with a backslash or an `@`) gets a report-only card with no rule. Git read commands are
+not suggested: Claude Code does not ask about them.
+
+**What an agent usually costs.** From the sessions Claude Code already keeps (about 30 days), Cuelight
+works out, for each agent type and model, the typical run (the middle one), the slow case (the 90th
+percentile), the tokens and cost of a run, and how often it fails (failed and cut-off runs). It uses
+your runs in this project when there are at least five, else your runs in all projects, else it says
+there are not enough yet. It shows up in four places: an agent's
+panel (a "usual" row, with this run next to it), the Health box (**SLOWER THAN USUAL** for a running agent
+far past its slow case), the "Your usual" table at the bottom of the Advice tab, and
+`/cuelight:open estimate`. The scan reads your past transcripts read-only, in the background, and keeps
+numbers only (see "What Cuelight runs and touches").
 
 ## What you get
 
@@ -176,10 +254,14 @@ You can try every one of these without a real run: `python -m orchestra --demo`.
   arrow keys, to read the running total at any moment; the legend and a table
   under it carry every number too. Also: the pace now (last five minutes), when
   the budget runs out at that pace, the most expensive five minutes and who spent
-  them, and the most expensive agents. Without a price file it counts fresh
-  tokens instead of money.
+  them, and the most expensive agents. With prices turned off
+  (`ORCHESTRA_PRICES=off`), or for a model that has no price, it counts fresh tokens instead of money.
 
   ![The Spend tab, light theme: the running total stacked as main session and agents, the budget line with its 80% and limit crossings, and the crosshair reading at one moment](docs/evidence/screenshots/53-spend-light.png)
+- **Advice** — a tab of its own (`A`): a one-line verdict of the run, then fix-it cards, failures
+  first, each with what happened, what it cost and the change to make, ready to copy. Below them, "Your
+  usual": what each kind of agent takes in your own past sessions. Described in full under
+  "Advice: what to change next time".
 - **Did they check their work?** — for every agent that edited code: did it run a
   test, build, type check or lint (or the very file it edited) after its last edit,
   and did that pass? Finished agents with no check, or a failing one, go in the
@@ -266,7 +348,7 @@ You can try every one of these without a real run: `python -m orchestra --demo`.
   ![The Waiting on you card, dark theme: your time, agent time lost, waits, the longest wait, a per-agent ranking and the latest prompts](docs/evidence/screenshots/22-waits-dark.png)
 
 - **Search and shortcuts** — `Ctrl/Cmd+K` (or `/`) opens one box for agents,
-  tool calls, files and commands. Number keys switch views; `L` pauses live
+  tool calls, files and commands. Number keys switch views and `A` opens Advice; `L` pauses live
   updates, `R` replays, `T` changes the theme, `?` lists every shortcut. Shortcuts
   never fire while you are typing, or for a key the focused control uses itself
   (`0` fits the graph). Keyboard focus stays where it was when a live update
@@ -306,7 +388,8 @@ You can try every one of these without a real run: `python -m orchestra --demo`.
   (Timeline, Graph, Activity) at once without ever hiding or reflowing
   anything.
 - **Health & write-conflict boxes** — stalled, failed, and orphaned agents
-  surfaced instead of buried, plus a flag for any file two agents wrote
+  surfaced instead of buried, a running agent far past what its kind usually takes
+  (SLOWER THAN USUAL), plus a flag for any file two agents wrote
   independently — a real correctness risk, not just informational.
 - **Replay** — scrub or play back the run (1×-120×) to see who had launched,
   who was running and who had finished at any moment. Works in a static report
@@ -371,13 +454,26 @@ permission*, or that it died to a rate limit — facts a transcript cannot show.
 
 ## Cost and budget
 
-Cuelight shows what a run cost **only if you give it prices** — prices change
-and differ by contract, so none are built in. Copy
-[`docs/prices.example.json`](docs/prices.example.json) to
-`~/.config/cuelight/prices.json` (Windows: `%APPDATA%\cuelight\prices.json`, or
-point `ORCHESTRA_PRICES` at any file), replace the illustrative numbers with
-yours, and the header gains a cost figure. The file is re-read when it changes.
+Cuelight shows what a run cost out of the box, using **Anthropic's public list
+prices**. They are built in, dated (`orchestra/listprices.py` says when they were
+checked, currently 2026-10-12) and used only when you have no price file of your own. Every figure
+priced from them says "list price, as of" that date: the header total, the Spend tab, the Agents tab's
+cost column, the Advice tab and the two commands that print advice and estimates. (The Insights
+numbers, the agent panel, the by-agent and by-model tables, the History totals and the exports show
+the same figures without the label for now; the JSON export says where its prices came from.)
 
+- **Your own prices win.** Prices differ by contract and change over time. Copy
+  [`docs/prices.example.json`](docs/prices.example.json) to
+  `~/.config/cuelight/prices.json` (Windows: `%APPDATA%\cuelight\prices.json`, or
+  point `ORCHESTRA_PRICES` at any file), replace the illustrative numbers with
+  yours, and the header uses them instead. The file is re-read when it changes. A price file that
+  cannot be read is reported, not quietly replaced by the list prices.
+- **Turn money off.** `ORCHESTRA_PRICES=off` shows tokens only, with no list prices.
+- **Where a list price could be low, it is high.** Cache writes are priced at the one-hour rate (twice
+  the input price), because Claude Code writes most of its cache for an hour; Claude Haiku 5.5 is priced
+  at its rate for prompts over 100K tokens, five times its short-prompt rate. Figures lean high, never
+  low. Older models (Opus 4.5 and earlier, Sonnet 4.5 and earlier) have no list price and are listed
+  as unpriced rather than guessed.
 - Cost covers the **orchestrator's own usage as well as every subagent's**, per
   model (a session can switch models). A model with no matching price is listed
   as unpriced and the total is marked *partial* rather than silently counting it
@@ -429,7 +525,7 @@ ignored in favour of the default.
 | `ORCHESTRA_MAX_BUILDERS` | 24 | Sessions kept in memory at once |
 | `ORCHESTRA_FLEET_SECONDS` | 21600 | The Fleet view lists sessions active within this window |
 | `ORCHESTRA_FLEET_MAX_SESSIONS` | 50 | Most sessions the Fleet view lists |
-| `ORCHESTRA_PRICES` | `~/.config/cuelight/prices.json` | Price table that enables cost (see above) |
+| `ORCHESTRA_PRICES` | `~/.config/cuelight/prices.json`, else the built-in list prices | Your own price table, which wins over the list prices (see above); `off` turns cost off and shows tokens only |
 | `ORCHESTRA_BUDGET` | 0 (off) | Per-session spend limit, in the price file's currency |
 | `ORCHESTRA_BUDGET_WARN_RATIO` | 0.8 | Fraction of the budget at which warnings start |
 | `ORCHESTRA_LOOP_REPEATS` | 6 | An open agent whose last N tool calls are identical is flagged as a possible loop |
@@ -440,7 +536,7 @@ ignored in favour of the default.
 | `ORCHESTRA_HISTORY_DB` | `~/.local/share/cuelight/history.sqlite` | Where history is kept |
 | `ORCHESTRA_HISTORY_DAYS` | 90 | Runs older than this are deleted |
 | `ORCHESTRA_HISTORY_MAX_RUNS` | 500 | Most runs kept |
-| `ORCHESTRA_STATE_DIR` | per-user dir in the OS temp dir | Where port files, logs and the event spool live |
+| `ORCHESTRA_STATE_DIR` | per-user dir in the OS temp dir | Where port files, logs, the event spool and the cache of past-run numbers live |
 | `ORCHESTRA_EVENTS` | on | `off` stops the hooks recording anything |
 
 ## What Cuelight runs and touches
@@ -451,8 +547,8 @@ Everything it does, in one place (the full policy is in [PRIVACY.md](PRIVACY.md)
 | | |
 |---|---|
 | **Programs it runs** | `bin/cuelight`, a short shell script that starts `orchestra/__main__.py` with your Python (the dashboard, started only when you run `/cuelight:open`; Claude Code asks you before it runs, since the command pre-approves nothing, and "don't ask again" covers only `cuelight`) and `orchestra/hook.py` (one short-lived process per Claude Code event, installed by `hooks/hooks.json`). Both are plain Python from this repository; nothing is downloaded or installed. |
-| **Files it reads** | Claude Code transcripts under `~/.claude/projects`, its own hook spool, and an optional price file you provide |
-| **Files it writes** | The hook spool and a port/token file in a per-user state folder (deleted after 7 days or when the dashboard stops) plus the dashboard's error log there (normally empty), an optional metrics-only history file (off by default), and an HTML report or CSV/JSON export only when you ask for one. Never anything under `~/.claude` |
+| **Files it reads** | Claude Code transcripts under `~/.claude/projects`: the session you are viewing, and (read-only, in a background thread when the dashboard starts, or when you run `advise` or `estimate`) your past sessions in every project, to learn what each kind of agent usually takes; its own hook spool; and an optional price file you provide |
+| **Files it writes** | The hook spool and a port/token file in a per-user state folder (deleted after 7 days or when the dashboard stops) plus the dashboard's error log there (normally empty), the cache of past-run numbers there (`baselines-v2.json`, mode `0600`: numbers per finished agent such as its type, model, time, tokens and a short hash of the project folder name, never prompts, briefs, results, paths or commands; deleting it costs one rescan), an optional metrics-only history file (off by default), and an HTML report or CSV/JSON export only when you ask for one. Never anything under `~/.claude` |
 | **Network** | None. The server listens on `127.0.0.1` only and nothing is fetched or sent. Using Claude Code itself is unchanged |
 | **Permissions it needs** | None beyond running the two programs above. It is read-only and cannot approve, deny or change anything in Claude Code |
 | **Works in** | Claude Code (terminal, IDE extensions and the desktop Code tab). It needs a local Python 3.9+ and does not run on claude.ai chat or Cowork |

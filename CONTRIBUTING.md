@@ -41,7 +41,9 @@ catches each one first (details in [docs/SUBMISSION.md](docs/SUBMISSION.md)):
 - **Images.** Show images in the README with Markdown syntax only; do not add an image nothing uses; keep
   scripts from naming bundled images where you can.
 - **File size.** No file over 256 KiB (images aside). `orchestra/static/app.js` is close: put a new tab-sized
-  view in `orchestra/static/tabs.js`.
+  view in `orchestra/static/tabs.js`, or, if it is a tab with its own state and data, in a file of its own
+  loaded after `tabs.js` the way `orchestra/static/advice.js` is (add it to `index.html`, to `report.py` and to
+  the test helpers that read the front end).
 
 ## Making a change
 
@@ -52,6 +54,11 @@ catches each one first (details in [docs/SUBMISSION.md](docs/SUBMISSION.md)):
    (the server reads the files on every request): a change to the `#...` part of the address alone does not
    reload it.
 4. Update [CHANGELOG.md](CHANGELOG.md) under `Unreleased`.
+   Advice and "usual" numbers have three test files to extend: `tests/test_advice.py` (a new rule or
+   failure cause: its trigger, a case just below its threshold, merging, and what its snippet says),
+   `tests/test_baselines.py` (anything about past runs or the cache) and `tests/test_advice_ui.py` (the tab).
+   A card's snippet is text people paste into their settings, so a test pins its exact text, and nothing is
+   suggested unless the record proves the whole of it.
 5. Open a pull request. CI runs Linux, macOS and Windows on Python 3.9, 3.12 and 3.13, and the plugin
    validator. `main` only changes by merged pull request, and only once CI is green on every job.
 

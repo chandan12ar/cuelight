@@ -253,3 +253,45 @@ Each step: full suite → commit → push → read CI.
 - **Scan cost on big histories.** 57 sessions / 305 MB took 6.8 s here; background + per-session cache.
 - **Directory review.** New files are plain Python/JS; no network, no binaries, no hooks change. Snippets
   are checked by the existing credential-shape guard.
+
+## 16. As built (2026-10-13)
+
+Sections 1 to 15 are left as they were written. Review rounds while building changed these details, and
+where the two disagree, this section is right.
+
+- **Cache.** The file is `baselines-v2.json`. Version 2 came when agents that were cut off (no end time)
+  became rows too: they count toward the fail rate (failed and cut-off runs) but not toward time, tokens or
+  cost. A session that still had an unfinished agent when it was read is read again at the next scan
+  instead of being reused. A group needs at least 5 runs, one of them timed, to be quoted. The skipped-tests
+  rate counts only `unchecked` among runs that edited code, not `failing`.
+- **Prices.** Cache writes are priced at the one-hour rate and Claude Haiku 5.5 at its over-100K rate, so
+  list-priced figures lean high. A price file that cannot be read is reported, not replaced by list prices.
+  The "list price, as of" label is on the header total, the Spend tab, the Agents tab, the Advice tab and the
+  two commands; not yet on the Insights numbers, the agent panel, the Spend by-agent and by-model tables,
+  History totals and CSV/JSON exports (the JSON carries where its prices came from).
+- **Failure cards.** An API error is the cause only when it was not recovered from. "Ran out of context" is
+  `sure` when a compaction is recorded and `possible` when only the assumed window's fill reached 95%; loops
+  are `possible`. A stalled agent with a call still open is "went quiet during a tool call". Cards with the
+  same cause and fix in several agents merge.
+- **Verify** cards are for completed agents only (a failed or cut-off agent has its failure card). A failing
+  check is keyed by its own command, and the command in a snippet is its first line, never a cut-off one.
+- **Worktree** cards appear only when the writers of a file were running at the same time. Agents that took
+  turns on a file are a handoff.
+- **Pre-approve.** Questions Claude asks on purpose (`AskUserQuestion`, `ExitPlanMode`) never count. Git
+  `status`, `diff` and `log` are not on the list, because Claude Code never asks about them. A Bash rule needs
+  the whole command (a single plain line, no `; & | > <`, backtick or `$(`); a WebFetch rule needs a strict
+  host check (no backslash or `@`, a dotted name ending in letters, no IP address or `localhost`, a URL under
+  160 characters on one line). Every suggested rule says how far it reaches, since it allows any arguments and
+  runs project code. A card shows at 60 seconds or at 3 prompts; anything else is a report-only card.
+- **Could have run together.** Only agents launched within 2 minutes of the previous one ending, with no
+  prompt, handoff or shared file between them; all groups share one card.
+- **Far over usual.** Time, else cost, else tokens when unpriced, and only for completed agents. A card names
+  only the cards that can explain it (a time overage: pre-approve; cost or tokens: cache rebuilt or
+  pre-approve) or says none does, and agents that nothing explains share one card per kind. A running agent
+  far over usual goes in the Health box as SLOWER THAN USUAL, not in a replay.
+- **Order and counts.** Cards are ordered failure, then fix, then information, each by cost, time, tokens;
+  at most 12. The verdict's "N things to fix" and the tab badge count only failures and cards with a real
+  fix, so an information card is not counted; the badge is red when a failure card is shown.
+- **Always shown.** Failure, unchecked-work, same-file and missing-rules cards show whatever their size, since
+  their cost is a risk; so does a pre-approve card with 3 or more prompts.
+- **Carried but not shown.** The skipped-tests rate is in the payload, not on screen.

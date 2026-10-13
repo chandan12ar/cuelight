@@ -1,7 +1,8 @@
 # Cuelight — Roadmap to an enterprise-grade product
 
 Status: **built and merged** (0.2.0 onward; later rounds through 0.21.x are in `PROGRESS.md` and
-`CHANGELOG.md`, with what is verified and what is still open). Originally written as a proposal: Written after reading this repo end to
+`CHANGELOG.md`, with what is verified and what is still open). M1 (0.22.0, advice) is built on
+`feature/m1` and waits for the directory's review of 0.21.3 before its pull request (section 9). Originally written as a proposal: Written after reading this repo end to
 end, reading [Louis-CFM/coucou](https://github.com/Louis-CFM/coucou), and
 checking every claim below against current docs. Where something could *not* be
 verified from documentation, it is listed under [Spikes](#6-spikes-to-run-before-committing)
@@ -222,3 +223,26 @@ and SDK runs).
 3. **Primary OS** you and your users run — the code has Windows-specific paths
    and I'd test there first.
 4. **Go-ahead for Phase 0 + the Phase 1 event layer** as the first deliverable.
+
+---
+
+## 9. M1 (0.22.0): from dashboard to advisor
+
+People who looked at Cuelight asked three things: is this only Claude's logs in a dashboard, does it
+recommend anything when an agent fails, and can it tell me what a subagent will cost before I launch
+it? Everything above answers "what happened, and do I need to step in?". M1 answers "so what should I
+change?", worked out on your machine by rules, with no AI call and no network. Design:
+[`superpowers/specs/2026-10-12-m1-advice-design.md`](superpowers/specs/2026-10-12-m1-advice-design.md)
+(its section 16 lists where the built version differs).
+
+- **Built (branch `feature/m1`, version 0.22.0):** fix-it cards with what each problem cost and the
+  change to copy; why an agent failed, from the record; a one-line verdict; what each kind of agent
+  usually takes, from your past sessions; the Advice tab; `/cuelight:open advise` and `estimate`;
+  Anthropic's dated list prices as the default.
+- **When it merges:** one pull request, opened only after the directory has decided on 0.21.3 and the
+  owner says so. `main` stays frozen until then, because every merge to `main` becomes the version the
+  directory reviews.
+- **M2 candidates (not started):** patterns across runs ("unchecked in 7 of 10 runs"); run-level
+  baselines (what a whole run usually costs); an `advise` that applies a fix after the user approves it
+  (the approval would need an audit log, so it belongs in the separate opt-in plugin the owner already
+  decided on, not in this read-only one).

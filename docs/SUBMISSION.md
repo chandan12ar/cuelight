@@ -4,7 +4,7 @@ Status of Cuelight against Anthropic's published plugin requirements, plus ready
 submission form. Sources: the [pre-submission checklist](https://claude.com/docs/plugins/pre-submission-checklist),
 [Submit your plugin](https://claude.com/docs/plugins/submit) and the
 [plugin manifest reference](https://code.claude.com/docs/en/plugins-reference), read on 2026-10-03 and again on 2026-10-04;
-the portal's findings were read on 2026-10-09 (below).
+the portal's findings were read on 2026-10-09 (below). Version 0.22.0 (M1, advice) adds no new kind of file; see "What M1 (0.22.0) adds".
 Anthropic's rules change; re-check them before each submission.
 
 ## Where to submit
@@ -64,6 +64,28 @@ items block. The rest are warnings a reviewer reads, so Cuelight is always held 
 
 After merging a fix, **Check for new commits** in the portal rescans at once instead of within about 6 hours.
 
+## What M1 (0.22.0) adds
+
+M1 is built on `feature/m1` and merges only after the 0.21.3 review is decided. It adds plain Python and
+JavaScript, in the same shape as the rest of the plugin, and nothing the scanner has flagged before:
+
+- **New files:** `orchestra/advice.py`, `orchestra/baselines.py`, `orchestra/listprices.py`,
+  `orchestra/static/advice.js`, and tests (`tests/test_advice.py`, `test_advice_ui.py`, `test_baselines.py`,
+  `test_listprices.py`). Two actions in `commands/open.md` (`advise`, `estimate`) that run the same
+  `cuelight` launcher as the others.
+- **Unchanged:** no new hook (still the seven async observer hooks), no binary or image, no network access
+  (`tests/test_static_assets.py`), no `allowed-tools`, no package launcher, no file over 256 KiB
+  (`app.js` is about 236 KiB in a CRLF checkout), no credential-shaped text (the card snippets are
+  a `permissions.allow` entry, an `env` timeout line, `isolation: worktree`, `model: sonnet` and instruction
+  sentences; `TestNoSecretShapedText` and `TestNoCredentialReads` pass).
+- **New behaviour a reviewer may ask about:** the dashboard reads the user's past sessions under
+  `~/.claude/projects`, read-only and in the background, and writes one numbers-only cache file
+  (`baselines-v2.json`) in its own state directory, never under `~/.claude`. PRIVACY.md and the README's
+  "What Cuelight runs and touches" say so. The built-in list prices are numbers in a Python file, not a
+  fetch.
+- **No new portal finding is expected.** If the portal shows one after the merge, add it to the findings
+  table above with its files and what it means here.
+
 ## What to expect from review
 
 - **Held for a reviewer (not a rejection).** Cuelight installs hooks and starts a local server, so a person
@@ -89,10 +111,13 @@ After merging a fix, **Check for new commits** in the portal rescans at once ins
 **Data handling:**
 - *Does it read or store personal data?* It reads Claude Code transcripts on the user's own machine, which may
   contain whatever the user discussed. It shows them only to the user, in a local browser tab. It stores only
-  redacted hook events (7 days) and, if the user opts in, metrics-only run history (90 days).
+  redacted hook events (7 days), a cache of numbers per finished agent in past sessions (type, model, time,
+  tokens; no prompts, results, paths or commands; from 0.22.0) and, if the user opts in, metrics-only run
+  history (90 days).
 - *Does it send data to services other than its declared connectors?* No. It makes no outside network
   connections and has no telemetry.
-- *How long is data kept?* Hook events 7 days; optional history 90 days; reports until the user deletes them.
+- *How long is data kept?* Hook events 7 days; the past-runs cache until the system clears its temp folder;
+  optional history 90 days; reports until the user deletes them.
 - *Intended for people under 18?* No.
 
 ## After it is listed

@@ -1,8 +1,10 @@
 # PROGRESS
 
-State on 2026-10-09: 0.21.2 on `main` (#35-#37 merged, CI green). The owner paused new features:
-fix what exists, keep docs current, keep directory findings from coming back. 0.21.3 (the audit, PR #38)
-is open; see "Audit after the directory review" at the end. Where to pick up: `RESUME.md` section 4. One branch and PR
+State on 2026-10-13: `main` is 0.21.3 (#35-#38 merged, CI green) and the plugin directory is reviewing it,
+so `main` is frozen. The owner paused new features on `main` (2026-10-09): there, fix what exists, keep docs
+current, keep directory findings from coming back. The one exception is **M1 (0.22.0), built on `feature/m1`**:
+see "M1" at the end. Next is the final whole-branch review; its PR to `main` waits until the directory review
+is decided and the owner says so. Where to pick up: `RESUME.md` section 4. One branch and PR
 per feature; rules in `.claude/CLAUDE.md`, one-page handoff in `RESUME.md`. The tables below are
 the record of each round, oldest first.
 
@@ -282,3 +284,63 @@ repeats. Done on `fix/directory-audit` (0.21.3, PR #38):
 | `claude plugin validate --strict` (plugin and marketplace), compile, `node --check` | Pass |
 | **Bug found:** `0` on the focused graph fitted it and then jumped to History (the page shortcut ran too) | Fixed: `onGlobalKey` skips a key a control already handled (`defaultPrevented`); test first, then checked in a real browser |
 | Docs | README (hook cost measured on Windows ~0.2 s, keyboard, development checks), PRIVACY (error log + exports listed), SUBMISSION (findings table, two new test-enforced rows), CONTRIBUTING (what the scanner flags), WORKFLOW (10 tabs), ROADMAP and FOLLOW-UPS status lines, ARCHITECTURE (shortcuts) |
+
+## M1: from dashboard to advisor (`feature/m1`, 0.22.0; owner's go-ahead 2026-10-12)
+
+People asked whether Cuelight is only the logs in a dashboard, whether it recommends anything when an
+agent fails, and whether it can say what an agent will cost before it is launched. Owner's choices
+(2026-10-12): fix-it cards plus usual cost per agent in one milestone; past data read from the transcripts
+Claude Code already keeps, numbers only, cached in Cuelight's temp state dir; shown in the dashboard and in
+Claude Code (`/cuelight:open advise`, `estimate`); Anthropic's dated list prices as the default; rules in
+Cuelight, Claude for follow-up questions, **Cuelight never applies a fix**. One branch, one version (0.22.0),
+one PR to `main`, opened **only after the 0.21.3 directory review is decided and the owner says so**
+(`main` is frozen until then). Design: `docs/superpowers/specs/2026-10-12-m1-advice-design.md` (section 16:
+where the built version differs). Plan: `docs/superpowers/plans/2026-10-12-m1-advice.md`.
+
+Built task by task, each one reviewed on its own, CI read after every push:
+
+| # | Task | State |
+|---|---|---|
+| 1 | List prices and the pricing fallback (`listprices.py`, `ORCHESTRA_PRICES=off`, "list price, as of" labels) | done |
+| 2 | Advice engine: card model, failure-cause ladder, merge, order, verdict (`advice.py`) | done |
+| 3 | Rules: unchecked work, same file, cache rebuilt, missing rules | done |
+| 4 | Pre-approve rule (allow-list, strict URL check, says how far a rule reaches) | done |
+| 5 | Possible rules: cheaper model, could have run together | done |
+| 6 | `--advise` and `/cuelight:open advise`; two false positives found on a real session and fixed | done |
+| 7 | The Advice tab (`static/advice.js`), badge, `A` key, report | done |
+| 8 | Past-runs scan and cache (`baselines.py`, `baselines-v2.json`), `--estimate` | done |
+| 9 | Usual numbers everywhere: agent panel, Health box (SLOWER THAN USUAL), over-usual card, `/api/usual` | done |
+| 10 | Docs, version 0.22.0, final checks (this entry) | done |
+
+**Final checks (2026-10-13), real data and a real browser:**
+
+- Full suite: 1337 tests, OK (4 skipped), 178 s. `tests.test_directory_readiness`: 25 tests, OK. `app.js` is 241,383 bytes (limit 262,144).
+- `--estimate` on this machine: 57 sessions scanned, 150 finished agents (123 outside the current session).
+  general-purpose on sonnet-5 (22 runs, this project): typical 3m 51s, slow case 13m 14s, $0.56, 5% fail.
+- `--advise` on three real sessions (the current one, the original build `73b33781` and `a059f327`): the
+  verdicts and every card read sensibly; the cache-rebuild card's 46 h break was checked against the
+  transcript timestamps (a real gap). Things that looked off, none fixed here (no rule changes in this task):
+  1. **Far longer than usual, "no other card explains it", for an agent that sat through a usage limit** (the
+     current session's Task 9 agent: 13h 27m). The cause is in the record (an API stall and a 12.8 h idle
+     gap) but `EXPLAINS` for time names only pre-approve cards.
+  2. **A long-working subagent reads as failed.** Session liveness is the main transcript's age (10 minutes,
+     unchanged since 0.21), so while the main session waits on a subagent for longer, an agent holding a tool
+     call becomes `failed`/`orphaned` and gets a "Stopped when the session ended" failure card. Seen live on
+     the Task 10 agent.
+  3. `--estimate` says "from 9 past sessions" when 57 were scanned (it counts sessions that had finished
+     agents).
+  4. A "far longer than usual" card can also show dollars (an agent in the group was also costly).
+- Real browser (the demo, then this session's real data on a second port): the Advice tab in light, dark and
+  at 375 px (no horizontal overflow); Copy (the pane denies clipboard writes, so "Copy failed" showed; with
+  the clipboard stubbed, "Copied!" and the snippet text); Hide, "Show 1 hidden card", Unhide, the badge going
+  5 to 4 to 5; the `A` key from the Timeline; an agent panel's "usual" row on real data ("1m 59s typical, 10m
+  58s slow case, ... This one: 12m 31s, 6.3x"); "Your usual" table; the Health box line **SLOWER THAN USUAL**
+  (no running agent was past its slow case, so the render was checked with injected data). Both servers were
+  stopped by PID. Also seen: in dark mode the red failure badge is white on #ff6b73 (2.76:1, below 4.5:1); at
+  phone width the Advice tab (and its badge) sits partly off the scrolling tab strip.
+
+**Where we are:** M1 is built, documented and pushed on `feature/m1` at 0.22.0. **Next:** the final
+whole-branch review, then fixes from it; then wait for the directory's decision on 0.21.3. The PR to `main`
+is opened only when the owner says so. After the merge: "Check for new commits" in the portal; if it shows a
+finding, add it to `docs/SUBMISSION.md`. M2 candidates (not started): patterns across runs, run-level
+baselines, an `advise` that applies a fix after approval (in the separate approvals plugin).

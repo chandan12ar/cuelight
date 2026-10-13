@@ -13,9 +13,10 @@ flowchart LR
   HK -->|"one redacted line"| SP[("Hook spool<br/>per-user state folder")]
   TR --> SV
   SP --> SV
-  SV["Cuelight server<br/>127.0.0.1 + token"] -->|"HTML, JSON, live stream"| UI["Browser tab<br/>Timeline, Graph, Agents, Insights, Spend,<br/>Prompts, Activity, Work Floor, Fleet, History"]
+  SV["Cuelight server<br/>127.0.0.1 + token"] -->|"HTML, JSON, live stream"| UI["Browser tab<br/>Timeline, Graph, Agents, Insights, Advice, Spend,<br/>Prompts, Activity, Work Floor, Fleet, History"]
   UI --> PILL["Pill window and tab icon"]
-  PR[("Price file<br/>optional")] -.-> SV
+  PR[("Price file<br/>optional; else list prices")] -.-> SV
+  PA[("Past sessions<br/>read-only, numbers cached")] -.-> SV
   HI[("History<br/>optional, metrics only")] -.-> SV
 ```
 
@@ -64,7 +65,9 @@ A badge shows how many sessions are waiting when more than one is. A waiting ses
 | A stalled agent | Open its drawer. If it is looping, the Insights tab shows the repeated step; stop it in Claude Code |
 | A failed agent | Open its drawer for the last tool call and message; the Graph shows what depended on it |
 | A write conflict | Two agents wrote the same file; check the Work Floor and the file before merging |
-| Cost higher than expected | Insights shows spend by agent and cache hits; supply a price file for real numbers |
+| Cost higher than expected | The Spend tab shows spend by agent and the Insights tab cache hits; the figures use Anthropic's list prices unless you supply a price file |
+| An agent failed or something wasted time | The Advice tab (`A`) says why, from the record, and gives the change to make; `/cuelight:open advise` prints the same in Claude Code |
+| Before launching more agents | `/cuelight:open estimate` shows what each kind of agent usually takes and costs, from your past sessions |
 
 Cuelight only observes. Every fix happens in Claude Code.
 

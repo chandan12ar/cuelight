@@ -1,7 +1,7 @@
 {
   "name": "cuelight",
   "displayName": "Cuelight",
-  "version": "0.21.3",
+  "version": "0.22.0",
   "description": "Know the moment your Claude Code agents need you: a local, read-only dashboard of subagent runs with live attention, critical path, evidence-backed handoffs, search and cost.",
   "author": {"name": "Chandan", "url": "https://github.com/chandan12ar"},
   "homepage": "https://github.com/chandan12ar/cuelight",

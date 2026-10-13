@@ -6,6 +6,66 @@ versions follow [SemVer](https://semver.org/) (the `version` in
 
 ## [Unreleased]
 
+## [0.22.0] - 2026-10-13
+
+M1: from a dashboard to an advisor. Cuelight now says what to change, not only what happened, and what an
+agent usually costs. All of it is worked out on your machine by rules, with no AI call and no network.
+
+### Added
+- **Fix-it cards and a verdict** (new **Advice** tab, key `A`, with a count on the tab that is red when an
+  agent failed). The verdict is one copyable line (`13 agents, 1 failed · 2 commits, 1 PR · 2 of 11 test
+  runs failed · $7.32 · 5 things to fix`). Each card says what happened (with the agents it concerns), what
+  it cost in minutes, tokens and dollars, and one change to make, with the text to copy. A card is tagged
+  **sure** (a fact in the record) or **possible** (a judgment). **Hide** puts a card away in this browser.
+  Cuelight never applies a fix.
+  - **Why an agent failed**, from the record: a usage limit, an expired login, a server error or an
+    overloaded API; a call that failed three times in a row; a command past its timeout; a context that
+    filled up; a loop; cut off when the session ended; or, when the record shows nothing, "No cause in the
+    record" with the last three calls.
+  - **Rules:** work nobody checked (or checks that failed); two agents writing one file at the same time
+    (`isolation: worktree`); a prompt cache rebuilt after a break; an agent that ran without your project
+    rules; a command you kept approving, as a `permissions.allow` entry (only test, build and lint commands
+    and web domains, and the card says how far the rule reaches); a cheaper model that would likely have
+    done; agents that could have run together; an agent far over what its kind usually takes. Cards need a
+    minute, 10,000 tokens or five cents to show, except risks (failures, unchecked work, shared files,
+    missing rules), and at most 12 show, failures first.
+- **What an agent usually costs.** From your past sessions (read-only, in the background, about 7 seconds
+  for 57 sessions and 305 MB the first time), Cuelight learns for each agent type and model how long it
+  usually takes, how many tokens and how much money, and how often it fails. It shows in an agent's panel
+  (a "usual" row), in the Health box (**SLOWER THAN USUAL** for a running agent far past its slow case), in
+  a "Your usual" table on the Advice tab, and in `GET /api/usual`. It keeps numbers only, in
+  `baselines-v2.json` in the state directory (never under `~/.claude`).
+- **`/cuelight:open advise`** (`cuelight --advise`) prints the verdict, the cards and a short fact sheet that
+  Claude can answer follow-up questions from; **`/cuelight:open estimate`** (`cuelight --estimate`) prints the
+  usual numbers before you launch more agents. The command file tells Claude to show them and not to change
+  any file unless you ask.
+- **Dollars out of the box.** Anthropic's public list prices are built in (`orchestra/listprices.py`, dated
+  2026-10-12) and used when you have no price file of your own. Figures priced from them say "list price, as of
+  2026-10-12" in the header, the Spend tab, the Agents tab, the Advice tab and the two commands.
+  `ORCHESTRA_PRICES=off` shows tokens only.
+
+### Changed
+- Your own price file still wins, and a price file that cannot be read is reported, not replaced by list
+  prices. Cache writes are priced at the one-hour rate and Claude Haiku 5.5 at its over-100K-token rate, so
+  list-priced figures lean high, never low; Opus 4.5 and earlier and Sonnet 4.5 and earlier stay unpriced.
+- Without a price file the dashboard now shows list-priced dollars instead of tokens only. Tests that assume
+  "no price file means tokens only" set `ORCHESTRA_PRICES=off`.
+- The error log keeps a hash of a whole URL as it did of a whole command, so a URL with a line break is not
+  mistaken for the line it starts with.
+- The static report includes the verdict and the cards (not the "Your usual" table, which comes from other
+  sessions).
+- README: "What problem it solves", an Advice section, two more example use cases, the list prices and what
+  the past-runs scan reads and writes; PRIVACY.md lists the new cache; ARCHITECTURE.md, SUBMISSION.md,
+  CONTRIBUTING.md and the roadmap describe the new files. The design's "As built" section lists where the
+  built version differs from the design.
+
+### Known limits
+- The "list price" label is not yet on the Insights numbers, the agent panel's cost row, the Spend by-agent and
+  by-model tables, History totals or the CSV/JSON exports (the JSON says where its prices came from).
+- The skipped-tests rate of each kind of agent is worked out and in the payload, but not shown on screen.
+- A subagent that works for more than ten minutes while its session's own transcript stays quiet is read by the
+  existing status rules as failed or cut off (unchanged from 0.21), and then gets a failure card.
+
 ## [0.21.3] - 2026-10-09
 
 An audit after the plugin directory's review of 0.21.0. No new features.

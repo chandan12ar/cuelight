@@ -3,8 +3,9 @@
 Cuelight is a Claude Code plugin that runs **entirely on your computer**. This page says exactly what
 it reads, what it writes, and what leaves your machine (nothing).
 
-*Last updated: 2026-10-09, for version 0.21.3 (checked against the code; the error log and exports are
-now listed, nothing else changed since 0.4.1).*
+*Last updated: 2026-10-13, for version 0.22.0 (checked against the code; new: Cuelight now also reads your
+past sessions in every project to learn what each kind of agent usually takes, and keeps numbers only,
+listed below. Nothing else changed since 0.21.3).*
 
 ## Short version
 
@@ -17,9 +18,9 @@ now listed, nothing else changed since 0.4.1).*
 
 | What | Where | Why |
 |---|---|---|
-| Claude Code session transcripts | `~/.claude/projects/...` | To rebuild the run: which agents ran, what each was asked, what each produced, and what the session is called and Claude Code's last recap of it, and what went wrong (the first line of API errors and failed tool results, redacted) |
+| Claude Code session transcripts | `~/.claude/projects/...` | To rebuild the run: which agents ran, what each was asked, what each produced, and what the session is called and Claude Code's last recap of it, and what went wrong (the first line of API errors and failed tool results, redacted). Since 0.22.0 also your **past** sessions in every project, read-only and in the background, to work out what each kind of agent usually takes (see the cache below) |
 | Hook events written by its own hooks | `<state dir>/events/<session>.jsonl` | To know when a session is waiting for your permission or input |
-| An optional price file you supply | the path in `ORCHESTRA_PRICES`, else Cuelight's per-user config folder | To show an estimated cost. It is never fetched from the internet |
+| An optional price file you supply | the path in `ORCHESTRA_PRICES`, else Cuelight's per-user config folder | To show an estimated cost. Without one, Cuelight uses Anthropic's public list prices, which are built into the plugin (dated, never fetched from the internet); `ORCHESTRA_PRICES=off` turns cost off |
 
 Transcripts can contain anything you and Claude discussed, including personal or confidential text.
 Cuelight reads them **locally** and shows them to **you** in a browser tab on the same computer. It does
@@ -32,6 +33,7 @@ not copy them anywhere else.
 | One line per hook event: the event name, session and agent ids, working directory and a short **redacted** message. Never tool inputs, prompts or file contents | `<state dir>/events/` | 7 days, then deleted |
 | The dashboard's port and access token | `<state dir>` (mode `0600`) | Until the dashboard stops |
 | The dashboard's error log: Python error tracebacks only; requests and URLs are never logged (normally empty) | `<state dir>/<session>.log` | Until you delete it or the system clears its temp folder |
+| The **past-runs cache**: for each finished agent in your past sessions, numbers only: the session id, a short hash of the project folder name (not the name or path), the agent type, the model, its status, when it started, how long it ran, its tokens by kind, its tool-call count, how long it waited on you, and whether it edited code, was checked or looped. **Never prompts, briefs, results, file paths or commands** | `<state dir>/baselines-v2.json` (mode `0600`, written atomically) | Until the system clears its temp folder or you delete it (the next scan rebuilds it); a session's numbers drop out when Claude Code deletes that session's transcript |
 | An export (CSV or JSON), **only when you ask** (the Export menu or `--export`) | your browser's downloads, or the path you choose | Until you delete it |
 | Optional run history (**off by default**; you turn it on with `ORCHESTRA_HISTORY=on`). **Metrics only**: counts, durations, tokens, cost and the project folder, with no prompts, task text, results or file paths | a small local SQLite file in Cuelight's per-user data folder | 90 days (adjustable), then pruned |
 | A static HTML report, **only when you ask** (`/cuelight:open report`) | the path you choose | Until you delete it |

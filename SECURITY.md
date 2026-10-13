@@ -31,3 +31,8 @@ steps to reproduce and the affected version.
 Cuelight does not approve, deny or otherwise control Claude Code. If that is
 ever added it will be a separate opt-in plugin with its own threat model and an
 audit log, and this document will be updated first.
+
+Since 0.22.0 Cuelight also suggests changes (the Advice tab, `/cuelight:open advise`), but only as text
+you copy: it never writes a settings file, an agent definition or a `CLAUDE.md`. A suggested
+`permissions.allow` rule is made only for a whole, plain test, build or lint command or a plain web domain,
+and says how far it reaches. Its scan of your past sessions is read-only and keeps numbers only.
