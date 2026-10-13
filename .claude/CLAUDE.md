@@ -30,8 +30,8 @@ work** = the record (transcripts) + the live truth (hooks), across all sessions.
   current, and keep directory findings from coming back. What is left: `RESUME.md`
   section 4.
 - **The one exception is M1 (owner, 2026-10-12): advice, usual numbers per agent and list prices, built on
-  `feature/m1` only and versioned 0.22.0.** It is built and documented; next is the final whole-branch
-  review. `main` stays frozen (at 0.21.3) until the directory has decided on that version, because every
+  `feature/m1` only and versioned 0.22.0.** It is built, documented and through its final whole-branch
+  review; five small fixes remain before its PR (`PROGRESS.md` "M1"). `main` stays frozen (at 0.21.3) until the directory has decided on that version, because every
   merge to `main` becomes the version it reviews. The PR from `feature/m1` to `main` is opened only when the
   owner says so, and not before. Design: `docs/superpowers/specs/2026-10-12-m1-advice-design.md`.
 
@@ -71,6 +71,11 @@ work** = the record (transcripts) + the live truth (hooks), across all sessions.
   in docs write `<fake-...>`. Do not put credential-source names in demo data either.
   `tests/test_directory_readiness.py` (`TestNoSecretShapedText`, `TestNoCredentialReads`)
   fails first. Every portal finding and its meaning: `docs/SUBMISSION.md`.
+- **Run advice on real sessions before calling a rule done.** In M1, `--advise` on this machine's own
+  sessions caught six false "sure" cards that every unit test passed (questions counted as permission
+  prompts, writers that took turns called a conflict, a running background agent called failed, one slow
+  approval called "you kept approving", a usage-limit stall blamed on tool calls, look-alike cards filling
+  the list). A wrong card costs more trust than a missing one.
 - **A focused control's key must not also run a page shortcut.** Adding a tenth tab
   gave `0` a view, and `0` on the graph (fit) then jumped to History. `onGlobalKey`
   now honours `event.defaultPrevented`; handle a key there by calling preventDefault.

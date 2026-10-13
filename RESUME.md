@@ -13,9 +13,10 @@ findings from coming back.
 **M1 (0.22.0) is built on `feature/m1`**, the one exception the owner made (2026-10-12): the Advice tab,
 fix-it cards and verdict, why an agent failed, the usual numbers per kind of agent, `/cuelight:open advise`
 and `estimate`, and dated list prices as the default. All ten tasks are done and pushed, and the docs and
-the version (`plugin.json`, `CHANGELOG.md`) say 0.22.0. **Next: the final whole-branch review. The pull
-request to `main` waits until the 0.21.3 directory review is decided and the owner says so; do not open it
-before.** The last GitHub Release is **v0.17.0**; one for 0.21.x or 0.22.0 needs the owner's yes.
+the version (`plugin.json`, `CHANGELOG.md`) say 0.22.0. The final whole-branch review and its fix wave are
+done (head `d0edfcf`, 1363 tests, CI green). **Next: five small fixes listed in `PROGRESS.md` "M1" ("Five
+fixes left before the PR"). The pull request to `main` waits until the 0.21.3 directory review is decided
+and the owner says so; do not open it before.** The last GitHub Release is **v0.17.0**; one for 0.21.x or 0.22.0 needs the owner's yes.
 Details: `PROGRESS.md` (status by round), `.claude/CLAUDE.md` (rules + lessons), `CHANGELOG.md`
 (per version), `docs/ARCHITECTURE.md` (how it works), `docs/superpowers/specs/2026-10-12-m1-advice-design.md`
 (M1's design; section 16 says where the built version differs), `docs/FOLLOW-UPS.md` (older review items).
@@ -58,10 +59,12 @@ Fleet, History.
   `docs/SUBMISSION.md` ("Findings in the portal"); `CONTRIBUTING.md` says what the scanner flags. M1 is
   the one exception (2026-10-12), and it lives only on `feature/m1`.
 - **Next, in order:**
-  1. **Final whole-branch review of `feature/m1`** (every task was reviewed on its own; the whole branch
-     has not been). What the last checks found, for that review: `PROGRESS.md` "M1" (the badge contrast in
-     dark mode, the "far longer than usual" card for an agent that sat through a usage limit, the label
-     gaps for list prices, and the status quirk for a long-working subagent).
+  1. **Five fixes on `feature/m1` before its PR** (the final whole-branch review is done; these came from
+     its fix wave's re-review): resumed agents' false "same file" card and the docs that overclaim it; the
+     "not its tool calls" wording for long commands; one known limit back in the CHANGELOG; the generic
+     badge's dark-mode contrast; a check of prompts raised together. Details and suggested fixes:
+     `PROGRESS.md` "M1". Decisions taken during the build: the git-ignored ledger
+     `.superpowers/sdd/2026-10-12-m1-advice/progress.md` (if it is gone, `git log feature/m1` holds the work).
   2. Wait for the directory's decision on 0.21.3 (the owner reads the portal). If it asks for a change,
      fix it on `main` by its own small PR, then bring it into `feature/m1`.
   3. When the owner says so, open the pull request from `feature/m1` to `main` (one PR, 0.22.0), read its

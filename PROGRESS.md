@@ -3,8 +3,9 @@
 State on 2026-10-13: `main` is 0.21.3 (#35-#38 merged, CI green) and the plugin directory is reviewing it,
 so `main` is frozen. The owner paused new features on `main` (2026-10-09): there, fix what exists, keep docs
 current, keep directory findings from coming back. The one exception is **M1 (0.22.0), built on `feature/m1`**:
-see "M1" at the end. Next is the final whole-branch review; its PR to `main` waits until the directory review
-is decided and the owner says so. Where to pick up: `RESUME.md` section 4. One branch and PR
+see "M1" at the end. Its final whole-branch review and fix wave are done (head `d0edfcf`, 1363 tests, CI
+green); five small fixes remain before its PR, which waits until the directory review is decided and the
+owner says so. Where to pick up: `RESUME.md` section 4. One branch and PR
 per feature; rules in `.claude/CLAUDE.md`, one-page handoff in `RESUME.md`. The tables below are
 the record of each round, oldest first.
 
@@ -339,8 +340,37 @@ Built task by task, each one reviewed on its own, CI read after every push:
   stopped by PID. Also seen: in dark mode the red failure badge is white on #ff6b73 (2.76:1, below 4.5:1); at
   phone width the Advice tab (and its badge) sits partly off the scrolling tab strip.
 
-**Where we are:** M1 is built, documented and pushed on `feature/m1` at 0.22.0. **Next:** the final
-whole-branch review, then fixes from it; then wait for the directory's decision on 0.21.3. The PR to `main`
-is opened only when the owner says so. After the merge: "Check for new commits" in the portal; if it shows a
-finding, add it to `docs/SUBMISSION.md`. M2 candidates (not started): patterns across runs, run-level
-baselines, an `advise` that applies a fix after approval (in the separate approvals plugin).
+**Final whole-branch review (2026-10-13, Opus):** "ready to merge with fixes". One fix wave (`c2cc910..d0edfcf`)
+fixed what it found: a background subagent working past 10 minutes no longer reads as failed (session
+liveness now also counts agents' own activity); a redo after a failed agent is no longer a "same file" card;
+pre-approve needs 3 prompts (a wait includes the command's own run time) and suggests the exact command when
+you approved one command; an agent's own API stalls and idle gaps explain a "far longer than usual" card;
+the Advice tab skips identical redraws (Copy and text selection survive); dark-mode failure badge readable.
+1363 tests OK, CI green. Every decision taken during the build (31 rulings) is in the git-ignored ledger
+`.superpowers/sdd/2026-10-12-m1-advice/progress.md`.
+
+**Five fixes left before the PR** (found by the fix wave's re-review; one follow-up session was proposed for them):
+
+1. **Resumed agents:** `status.build_rounds` makes a resumed agent's rounds contiguous, so its "working
+   stretches" still cover the pause and it can still get a false "Agents wrote the same file" card; README,
+   ARCHITECTURE, spec section 16 and CHANGELOG claim this case is handled. Fix: derive working stretches from
+   the agent's tool-call times; test with real `build_rounds` output.
+2. **Long commands read as idle:** the stopped-time sentence ("that, not its tool calls, is most of the
+   overage") is wrong when a gap was a long Bash/Task/Agent call. Count a gap as idle only after calls that
+   cannot run long; otherwise point at the longest tool calls.
+3. **Known limits:** restore one line in CHANGELOG 0.22.0: a single tool call over 10 minutes while every
+   transcript is quiet can still mark that agent stopped.
+4. **Badge contrast:** the generic `.badge` (white on `--waiting`) is 2.68:1 in dark mode; use `var(--bar-ink)`.
+5. **Parallel prompts:** check on real data whether prompts raised together can be credited to the wrong
+   command (`advice._waited_on` pairs a wait with the latest earlier call); if so, require one open call.
+
+Deferred by ruling (not needed for the PR): an `ORCHESTRA_BASELINES=off` switch; skipping the current
+session in `--advise`/`--estimate` scans; per-round durations in the usual numbers; fewer "far over usual"
+info cards when nearly every agent is `general-purpose`.
+
+**Where we stopped (2026-10-13):** the owner chose to keep `feature/m1` as it is and continue later. **Next:**
+the five fixes above (on `feature/m1`, full suite + push + CI after each); then wait for the directory's
+decision on 0.21.3; the PR to `main` is opened only when the owner says so. After the merge: "Check for new
+commits" in the portal; if it shows a finding, add it to `docs/SUBMISSION.md`. M2 candidates (not started):
+patterns across runs, run-level baselines, an `advise` that applies a fix after approval (in the separate
+approvals plugin).
