@@ -29,7 +29,8 @@ agent usually costs. All of it is worked out on your machine by rules, with no A
     done; agents that could have run together; an agent far over what its kind usually takes. Cards need a
     minute, 10,000 tokens or five cents to show, except risks (failures, unchecked work, shared files,
     missing rules), and at most 12 show, failures first.
-- **What an agent usually costs.** From your past sessions (read-only, in the background, about 7 seconds
+- **What an agent usually costs.** From your past sessions (read-only; in the background when the dashboard
+  starts, in the foreground for the two commands below; no off switch yet; about 7 seconds
   for 57 sessions and 305 MB the first time), Cuelight learns for each agent type and model how long it
   usually takes, how many tokens and how much money, and how often it fails. It shows in an agent's panel
   (a "usual" row), in the Health box (**SLOWER THAN USUAL** for a running agent far past its slow case), in
@@ -40,9 +41,10 @@ agent usually costs. All of it is worked out on your machine by rules, with no A
   usual numbers before you launch more agents. The command file tells Claude to show them and not to change
   any file unless you ask.
 - **Dollars out of the box.** Anthropic's public list prices are built in (`orchestra/listprices.py`, dated
-  2026-10-12) and used when you have no price file of your own. Figures priced from them say "list price, as of
-  2026-10-12" in the header, the Spend tab, the Agents tab, the Advice tab and the two commands.
-  `ORCHESTRA_PRICES=off` shows tokens only.
+  2026-10-12) and used when you have no price file of your own. The header total shows "(list price)" (the date
+  is in its tooltip), the Agents tab's cost column says "Cost (list price)" (date in its tooltip), and the Spend
+  tab, the Advice tab and the two commands say "list price, as of 2026-10-12". `ORCHESTRA_PRICES=off` shows
+  tokens only.
 
 ### Changed
 - Your own price file still wins, and a price file that cannot be read is reported, not replaced by list

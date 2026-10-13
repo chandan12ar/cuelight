@@ -1,8 +1,12 @@
 # Cuelight — Roadmap to an enterprise-grade product
 
 Status: **built and merged** (0.2.0 onward; later rounds through 0.21.x are in `PROGRESS.md` and
-`CHANGELOG.md`, with what is verified and what is still open). M1 (0.22.0, advice) is built on
-`feature/m1` and waits for the directory's review of 0.21.3 before its pull request (section 9). Originally written as a proposal: Written after reading this repo end to
+`CHANGELOG.md`, with what is verified and what is still open).
+
+M1 (0.22.0, advice) is built on `feature/m1` and waits for the directory's review of 0.21.3 before its
+pull request (section 9).
+
+Originally written as a proposal: written after reading this repo end to
 end, reading [Louis-CFM/coucou](https://github.com/Louis-CFM/coucou), and
 checking every claim below against current docs. Where something could *not* be
 verified from documentation, it is listed under [Spikes](#6-spikes-to-run-before-committing)

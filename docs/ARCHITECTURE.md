@@ -506,7 +506,8 @@ gone after the redraw leaves focus where it fell rather than moving it somewhere
 same control.
 
 **Keyboard shortcuts** (`onGlobalKey`, on `document`). Number keys `1`-`9`, `0` switch to the first ten views in
-tab order (`PALETTE_VIEWS`); `A` opens the eleventh, Advice; letters run commands. None fire with a modifier, while typing in a field, with
+the order of `PALETTE_VIEWS` (not the visible tab order, where Advice sits fifth); `A` opens Advice;
+letters run commands. None fire with a modifier, while typing in a field, with
 the palette or help open, or for a key a focused control already handled (`event.defaultPrevented`): the
 graph's own handler fits it on `0`, which before 0.21.3 also jumped to History.
 

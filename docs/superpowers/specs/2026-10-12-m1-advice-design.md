@@ -263,7 +263,9 @@ where the two disagree, this section is right.
   became rows too: they count toward the fail rate (failed and cut-off runs) but not toward time, tokens or
   cost. A session that still had an unfinished agent when it was read is read again at the next scan
   instead of being reused. A group needs at least 5 runs, one of them timed, to be quoted. The skipped-tests
-  rate counts only `unchecked` among runs that edited code, not `failing`.
+  rate counts only `unchecked` among runs that edited code, not `failing`. Each row keeps a short hash of
+  the project folder name (`baselines.project_key`), not the name that section 9 mentions, so no folder
+  name is stored.
 - **Prices.** Cache writes are priced at the one-hour rate and Claude Haiku 5.5 at its over-100K rate, so
   list-priced figures lean high. A price file that cannot be read is reported, not replaced by list prices.
   The "list price, as of" label is on the header total, the Spend tab, the Agents tab, the Advice tab and the
@@ -282,7 +284,8 @@ where the two disagree, this section is right.
   the whole command (a single plain line, no `; & | > <`, backtick or `$(`); a WebFetch rule needs a strict
   host check (no backslash or `@`, a dotted name ending in letters, no IP address or `localhost`, a URL under
   160 characters on one line). Every suggested rule says how far it reaches, since it allows any arguments and
-  runs project code. A card shows at 60 seconds or at 3 prompts; anything else is a report-only card.
+  runs project code. A card shows at 60 seconds or at 3 prompts. A command that is not on the allow-list
+  (or a Bash command or URL whose whole text is not known) gets a report-only card with no snippet.
 - **Could have run together.** Only agents launched within 2 minutes of the previous one ending, with no
   prompt, handoff or shared file between them; all groups share one card.
 - **Far over usual.** Time, else cost, else tokens when unpriced, and only for completed agents. A card names
@@ -295,3 +298,7 @@ where the two disagree, this section is right.
 - **Always shown.** Failure, unchecked-work, same-file and missing-rules cards show whatever their size, since
   their cost is a risk; so does a pre-approve card with 3 or more prompts.
 - **Carried but not shown.** The skipped-tests rate is in the payload, not on screen.
+- **Smaller shape changes.** A card's `impact` is `{seconds, tokens, cost, label}`; the currency and where
+  the prices came from (`priced_by`, `as_of`) are on the advice block, not on each card. `estimate` prints one
+  table for the project and all projects together, with a "from" column saying which a row used. The "Your
+  usual" table on the Advice tab has a Tokens column as well as time and cost.

@@ -456,11 +456,12 @@ permission*, or that it died to a rate limit — facts a transcript cannot show.
 
 Cuelight shows what a run cost out of the box, using **Anthropic's public list
 prices**. They are built in, dated (`orchestra/listprices.py` says when they were
-checked, currently 2026-10-12) and used only when you have no price file of your own. Every figure
-priced from them says "list price, as of" that date: the header total, the Spend tab, the Agents tab's
-cost column, the Advice tab and the two commands that print advice and estimates. (The Insights
-numbers, the agent panel, the by-agent and by-model tables, the History totals and the exports show
-the same figures without the label for now; the JSON export says where its prices came from.)
+checked, currently 2026-10-12) and used only when you have no price file of your own. They are labelled in
+these places: the header total shows "(list price)" with "list price, as of" the date in its tooltip; the
+Agents tab's cost column header says "Cost (list price)" with the date in its tooltip; and the Spend tab,
+the Advice tab and the two commands that print advice and estimates say "list price, as of" the date. Not
+labelled yet: the Insights numbers, the agent panel's cost row, the Spend by-agent and by-model tables, the
+History totals and the CSV and JSON exports (the JSON export says where its prices came from).
 
 - **Your own prices win.** Prices differ by contract and change over time. Copy
   [`docs/prices.example.json`](docs/prices.example.json) to
@@ -547,7 +548,7 @@ Everything it does, in one place (the full policy is in [PRIVACY.md](PRIVACY.md)
 | | |
 |---|---|
 | **Programs it runs** | `bin/cuelight`, a short shell script that starts `orchestra/__main__.py` with your Python (the dashboard, started only when you run `/cuelight:open`; Claude Code asks you before it runs, since the command pre-approves nothing, and "don't ask again" covers only `cuelight`) and `orchestra/hook.py` (one short-lived process per Claude Code event, installed by `hooks/hooks.json`). Both are plain Python from this repository; nothing is downloaded or installed. |
-| **Files it reads** | Claude Code transcripts under `~/.claude/projects`: the session you are viewing, and (read-only, in a background thread when the dashboard starts, or when you run `advise` or `estimate`) your past sessions in every project, to learn what each kind of agent usually takes; its own hook spool; and an optional price file you provide |
+| **Files it reads** | Claude Code transcripts under `~/.claude/projects`: the session you are viewing, and, read-only, your past sessions in every project, to learn what each kind of agent usually takes. The dashboard reads them in a background thread when it starts; `advise` and `estimate` read them in the foreground before they print (a few seconds; sessions that have not changed come from the cache). This scan has no off switch yet (`ORCHESTRA_EVENTS=off` covers the hooks only): it reads files Claude Code already keeps and stores numbers only. Also its own hook spool and an optional price file you provide |
 | **Files it writes** | The hook spool and a port/token file in a per-user state folder (deleted after 7 days or when the dashboard stops) plus the dashboard's error log there (normally empty), the cache of past-run numbers there (`baselines-v2.json`, mode `0600`: numbers per finished agent such as its type, model, time, tokens and a short hash of the project folder name, never prompts, briefs, results, paths or commands; deleting it costs one rescan), an optional metrics-only history file (off by default), and an HTML report or CSV/JSON export only when you ask for one. Never anything under `~/.claude` |
 | **Network** | None. The server listens on `127.0.0.1` only and nothing is fetched or sent. Using Claude Code itself is unchanged |
 | **Permissions it needs** | None beyond running the two programs above. It is read-only and cannot approve, deny or change anything in Claude Code |

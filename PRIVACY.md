@@ -26,6 +26,10 @@ Transcripts can contain anything you and Claude discussed, including personal or
 Cuelight reads them **locally** and shows them to **you** in a browser tab on the same computer. It does
 not copy them anywhere else.
 
+The scan of your past sessions (since 0.22.0) has **no off switch yet**: `ORCHESTRA_EVENTS=off` below turns off
+the hooks only. It reads files Claude Code already keeps, read-only, and stores numbers only (the past-runs
+cache below). Deleting that cache file costs one rescan.
+
 ## What it writes
 
 | What | Where | Kept for |
@@ -33,7 +37,7 @@ not copy them anywhere else.
 | One line per hook event: the event name, session and agent ids, working directory and a short **redacted** message. Never tool inputs, prompts or file contents | `<state dir>/events/` | 7 days, then deleted |
 | The dashboard's port and access token | `<state dir>` (mode `0600`) | Until the dashboard stops |
 | The dashboard's error log: Python error tracebacks only; requests and URLs are never logged (normally empty) | `<state dir>/<session>.log` | Until you delete it or the system clears its temp folder |
-| The **past-runs cache**: for each finished agent in your past sessions, numbers only: the session id, a short hash of the project folder name (not the name or path), the agent type, the model, its status, when it started, how long it ran, its tokens by kind, its tool-call count, how long it waited on you, and whether it edited code, was checked or looped. **Never prompts, briefs, results, file paths or commands** | `<state dir>/baselines-v2.json` (mode `0600`, written atomically) | Until the system clears its temp folder or you delete it (the next scan rebuilds it); a session's numbers drop out when Claude Code deletes that session's transcript |
+| The **past-runs cache**: for each finished agent in your past sessions, numbers only: the session id, a short hash of the project folder name (not the name or path), the agent type, the model, its status, when it started, how long it ran, its tokens by kind, its tool-call count, how long it waited on you, and whether it edited code, was checked or looped. Per session it also keeps a fingerprint to tell whether the session changed: the names, sizes and modified times of its transcript files (no content). **Never prompts, briefs, results, file paths or commands** | `<state dir>/baselines-v2.json` (mode `0600`, written atomically) | Until the system clears its temp folder or you delete it (the next scan rebuilds it); a session's numbers drop out when Claude Code deletes that session's transcript |
 | An export (CSV or JSON), **only when you ask** (the Export menu or `--export`) | your browser's downloads, or the path you choose | Until you delete it |
 | Optional run history (**off by default**; you turn it on with `ORCHESTRA_HISTORY=on`). **Metrics only**: counts, durations, tokens, cost and the project folder, with no prompts, task text, results or file paths | a small local SQLite file in Cuelight's per-user data folder | 90 days (adjustable), then pruned |
 | A static HTML report, **only when you ask** (`/cuelight:open report`) | the path you choose | Until you delete it |
