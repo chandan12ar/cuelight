@@ -22,13 +22,17 @@ agent usually costs. All of it is worked out on your machine by rules, with no A
     overloaded API; a call that failed three times in a row; a command past its timeout; a context that
     filled up; a loop; cut off when the session ended; or, when the record shows nothing, "No cause in the
     record" with the last three calls.
-  - **Rules:** work nobody checked (or checks that failed); two agents writing one file at the same time
-    (`isolation: worktree`); a prompt cache rebuilt after a break; an agent that ran without your project
-    rules; a command you kept approving, as a `permissions.allow` entry (only test, build and lint commands
-    and web domains, and the card says how far the rule reaches); a cheaper model that would likely have
-    done; agents that could have run together; an agent far over what its kind usually takes. Cards need a
-    minute, 10,000 tokens or five cents to show, except risks (failures, unchecked work, shared files,
-    missing rules), and at most 12 show, failures first.
+  - **Rules:** work nobody checked (or checks that failed); two agents writing one file at the same time,
+    compared round by round (`isolation: worktree`); a prompt cache rebuilt after a break; an agent that ran
+    without your project rules; a command you approved three or more times, as a `permissions.allow` entry
+    (only test, build and lint commands and web domains; exactly that command when you approved the same one
+    each time, else any arguments, and the card says how far the rule reaches, including that some arguments
+    of these tools can run any program); a cheaper model that would likely have done; agents that could have
+    run together; an agent far over what its kind usually takes, which says when most of the extra time was
+    the agent stopped by an API error or idle. Cards need a minute, 10,000 tokens or five cents to show,
+    except risks (failures, unchecked work, shared files, missing rules) and the pre-approve card (three
+    prompts, never seconds: a prompt's wait holds the approved command's own run time), and at most 12
+    show, failures first.
 - **What an agent usually costs.** From your past sessions (read-only; in the background when the dashboard
   starts, in the foreground for the two commands below; no off switch yet; about 7 seconds
   for 57 sessions and 305 MB the first time), Cuelight learns for each agent type and model how long it
@@ -47,6 +51,16 @@ agent usually costs. All of it is worked out on your machine by rules, with no A
   Anthropic list prices as of 2026-10-12." (advise) and "Costs use Anthropic list prices as of 2026-10-12."
   (estimate), and the verdict line marks the total "(list price)" without a date. `ORCHESTRA_PRICES=off`
   shows tokens only.
+
+### Fixed
+- **A subagent that works for more than ten minutes while the main thread is idle is no longer shown as failed
+  or cut off.** A session now counts as live while any agent's transcript has had an entry in the last ten
+  minutes, not only the main transcript (a `SessionEnd` event still ends it at once). Before, such an agent
+  became `failed` or `orphaned` and the Advice tab showed a red "Stopped when the session ended" card for work
+  that was still going.
+- The failure badge on the Advice tab is readable in dark mode (dark text on the lighter red).
+- The Advice tab no longer rewrites its whole page on every refresh when nothing changed, so a text selection,
+  the scroll position and a "Copied!" survive.
 
 ### Changed
 - Your own price file still wins, and a price file that cannot be read is reported, not replaced by list
@@ -67,8 +81,6 @@ agent usually costs. All of it is worked out on your machine by rules, with no A
 - The "list price" label is not yet on the Insights numbers, the agent panel's cost row, the Spend by-agent and
   by-model tables, History totals or the CSV/JSON exports (the JSON says where its prices came from).
 - The skipped-tests rate of each kind of agent is worked out and in the payload, but not shown on screen.
-- A subagent that works for more than ten minutes while its session's own transcript stays quiet is read by the
-  existing status rules as failed or cut off (unchanged from 0.21), and then gets a failure card.
 
 ## [0.21.3] - 2026-10-09
 

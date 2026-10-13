@@ -42,8 +42,9 @@ flowchart LR
 | waiting | blocked on you | would be running or stalled, but a permission or input prompt appeared (from the hooks) and no activity has followed it |
 | unknown | no evidence it started | no rounds at all |
 
-A session counts as live if its transcript changed within the last 10 minutes. Both thresholds can be changed
-(`ORCHESTRA_STALL_SECONDS`, `ORCHESTRA_SESSION_LIVE_SECONDS`).
+A session counts as live if its transcript changed within the last 10 minutes, or any of its agents wrote an
+entry in that time (a background agent keeps working while the main thread is idle). Both thresholds can be
+changed (`ORCHESTRA_STALL_SECONDS`, `ORCHESTRA_SESSION_LIVE_SECONDS`).
 
 ## 3. What the pill and tab icon say
 

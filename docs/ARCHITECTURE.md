@@ -331,10 +331,15 @@ Two functions, and this is the "formula" behind every colored dot in the UI:
 5. Otherwise, `running`.
 
 A **session** itself counts as "live" (`RunBuilder._session_live`) if its
-main transcript file was modified within `SESSION_LIVE_THRESHOLD_S`
-(**600 seconds**) of now — this is a mtime check, nothing fancier, which is
-exactly why a truly finished session (report generation) never counts as
-live.
+main transcript file was modified, or any agent's transcript had an entry
+(`_activity_at`, entry timestamps), within `SESSION_LIVE_THRESHOLD_S`
+(**600 seconds**) of now. A background subagent can work for longer than that
+while the main thread sits idle, so the main transcript's mtime alone would
+read a busy session as over and its working agents as `failed`/`orphaned`. A
+`SessionEnd` hook event still wins: when the main transcript was last written
+at or just after it, the session is over whatever an agent wrote. This is
+still a clock check, nothing fancier, which is exactly why a truly finished
+session (report generation) never counts as live.
 
 ### `extract.py` — pulling intent out of free text, deterministically
 Every subagent's `objective` and `expected_output` fields (shown in the
@@ -1258,35 +1263,51 @@ card's snippet is text to copy. Its own text is ASCII, so the command line print
   | Rule | Fires when | Tag |
   |---|---|---|
   | `verify` | A **completed** agent's checks are `unchecked` after code edits, or `failing`. A failing card is keyed by its own command; the command in a snippet is its first line only, never a cut-off one | sure |
-  | `worktree` | One file was written by agents that **overlapped in time** (`_overlapped`: an agent still running runs until now; one with no known start counts as overlapping). Writers that took turns are a handoff, so no card | sure |
+  | `worktree` | One file was written by agents that **overlapped in time** (`_overlapped`, round by round: an agent resumed after a pause is not taken to have worked in between; a round with no end runs until now only while the agent is running, waiting or stalled, else until the agent's last activity; a writer with no known start counts as overlapping). Writers that took turns are a handoff, so no card | sure |
   | `compact` | Cache rebuilds after an idle gap (`idle_long`, `idle_short`), main session and agents, with the extra cost over the cache-read price | sure |
   | `rules_missing` | An agent lacks instruction files the main session had; the text mentions `omitClaudeMd` | sure |
   | `preapprove` | Permission waits grouped by the command prefix or web domain they were about (below) | sure |
   | `cheaper_model` | A completed agent on Opus or Sonnet made 3 or more calls, all read/search tools, and the same tokens at the cheaper model's prices save at least $0.05 and 30% | possible |
   | `parallel` | Agents of one parent ran one after another: each launched within `PARALLEL_GAP_S` (120 s) of the previous one ending, with no prompt between, not in one launch batch, and no edge or shared file between them. All groups merge into one card; the saving is the sum of durations minus the longest | possible |
-  | `over_usual` | A completed agent over its usual 90th percentile **and** over 2x its typical value (`OVER_RATIO`): time first, else cost, else fresh tokens (used when the agent or its usual has no cost). Needs a usual with enough runs | sure |
+  | `over_usual` | A completed agent over its usual 90th percentile **and** over 2x its typical value (`OVER_RATIO`): time first, else cost, else fresh tokens (used when the agent or its usual has no cost). Needs a usual with enough runs. A time overage also records the agent's own stopped time (`_stopped_s`) | sure |
 
 - **Pre-approve** (`_preapprove_cards`). A wait is matched to the tool call open when it began (the latest
   call at or before its start). Questions Claude asks on purpose (`AskUserQuestion`, `ExitPlanMode`) never
-  count. A rule is suggested only for a Bash command whose **whole** text is known (the error log keeps a
+  count. A card, rule or report-only, needs `PROMPTS_ENOUGH` (3) prompts and never shows on seconds: a
+  wait's seconds include the approved command's own run time (`livestate.Wait`), so one slow approval says
+  nothing about habit. The title carries the count ("Pre-approve a command you approved 4 times", "You
+  approved `git` 4 times") and the text says the time includes the command's own run time. A rule is
+  suggested only for a Bash command whose **whole** text is known (the error log keeps a
   hash of the full value; `_is_whole`) that starts with a prefix in `SAFE_PREFIXES` (npm, pnpm and yarn
   test, lint and build scripts, pytest, `python -m pytest` and `unittest`, go test/build/vet, cargo
   test/check/build/clippy, make test/check/lint, ruff check, mypy, tsc, eslint) and contains none of
   `; & | > <`, a backtick, `$(` or a line break; and for a WebFetch URL that passes a strict host check
   (`_host`: no backslash or `@`, a dotted name whose last label is alphabetic, no IP literal, no
   `localhost`, under `TARGET_CUT` (160) characters and on one line, since a longer URL was cut by the log).
-  The card says how far the rule reaches (`SCOPE`: "allows any arguments, and runs code from your
-  project", or "any page on that domain"). Anything else gets a report-only `info` card with no snippet.
+  A WebFetch group's key includes whether the URL was whole, so a cut URL and a whole one to one host are
+  separate cards, and a report-only card for a cut URL names no host ("WebFetch" only).
+  The card says how far the rule reaches. When every wait in the group was the same whole command and it
+  contains none of `( ) *`, the rule is that exact command (`Bash(npm test -- --watch=false)`) and the text
+  offers `Bash(<prefix> *)` as the alternative (`EXACT_BASH`); otherwise the rule is `Bash(<prefix> *)` and
+  the text says "This allows any arguments. Some arguments of these tools can run any program (for example
+  go test -exec, pytest -p, make -f), not only your project's tests." (`SCOPE`). A WebFetch rule says "This
+  allows any page on that domain." Anything else gets a report-only `info` card with no snippet.
   `git status`, `diff` and `log` are not on the list: Claude Code never asks about them.
 - **Thresholds, merge, order** (`_select`). Over-usual cards that no raw card can explain merge by kind
   (`_group_unexplained`); then cards with the same `key` merge (agents joined, impacts added, "and N more
   like it"). A card is kept when its impact is at least `MIN_SECONDS` (60), `MIN_TOKENS` (10,000) or
   `MIN_COST` ($0.05), or when it is a risk that always shows (`always`: failure, verify, worktree and
-  rules_missing cards, and a pre-approve card with `PROMPTS_ENOUGH` (3) or more prompts). Order is severity
+  rules_missing cards, and every pre-approve card, which exists only at `PROMPTS_ENOUGH` (3) or more prompts).
+  Order is severity
   (failure, then fix, then info), then cost, seconds and tokens; at most `MAX_CARDS` (12). Only then does
   `_explain_over_usual` write each over-usual card's text, so it names only cards that are shown and can
   explain it (a time overage: a pre-approve card, time spent waiting on you; a cost or tokens overage: a
-  rebuilt-cache or pre-approve card), or says that no other card explains it.
+  rebuilt-cache or pre-approve card), or says that no other card explains it. For a time overage the agent's
+  own stopped time (`_stopped_s`) counts too: the time from each API error to the agent's next reply, plus
+  each gap of more than `IDLE_GAP_S` (300) seconds between consecutive tool calls (or between its model calls
+  when it made no tool call), overlaps counted once. When that is at least half of the overage the card is
+  not merged with the unexplained ones and says "It spent <t> stopped by an API error or idle; that, not its
+  tool calls, is most of the overage." (followed by any cards that also explain it).
 - **Verdict** (`_verdict_parts`): agents (and how many failed or were cut off), commits and PRs, tests
   passed or "N of M test runs failed", the cost with " (list price)" when it is one, and "N things to
   fix". That count is the failure cards plus the cards with a real fix (`fix.where != "none"`), so an
@@ -1297,7 +1318,9 @@ card's snippet is text to copy. Its own text is ASCII, so the command line print
 - **`--advise` text** (`render_text`): the verdict, a note when dollars are list prices, each card (title,
   tag, what happened, what it cost, where the fix goes, the snippet) and `fact_sheet` (at most 60 lines:
   wall time, one line per agent, top tools, conflicts, links, commits and PRs).
-- **The tab** (`advice.js`, loaded after `tabs.js`). `renderAdvice` draws the verdict with a Copy button,
+- **The tab** (`advice.js`, loaded after `tabs.js`). `renderAdvice` keeps its last markup in
+  `box.dataset.html` and writes nothing, and binds nothing again, when the markup is identical (the page
+  redraws every few seconds; this is the pattern `renderRecap` uses). It draws the verdict with a Copy button,
   the cards (escaped; agent chips open the agent panel; Copy puts the snippet on the clipboard and says
   "Copied!" or "Copy failed") and "Your usual". Hide keeps card ids in `localStorage`
   (`cuelight-advice-hidden`, in try/catch, capped at 200); a button under the cards shows or re-hides them.

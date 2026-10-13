@@ -170,8 +170,9 @@ your machine by rules you can read in `orchestra/advice.py`: no AI call, no netw
 
 **When an agent fails, the first card says why.** The first of these the record shows is the cause:
 
-1. an API error at the end that it did not recover from: a usage limit (wait, then resume), an expired login
-   (`/login`), a server error or an overloaded API (run it again);
+1. an API error at the end that it did not recover from: a usage limit (wait for it to reset, or do what the
+   message says, such as switching model or adding credits, then resume), an expired login (`/login`), a
+   server error or an overloaded API (run it again);
 2. a call that failed three times in a row (with an instruction line so it stops and reports instead);
 3. its last command ran past its timeout (run long commands in the background, or raise the Bash timeout);
 4. it ran out of context (split the task). This is "sure" when Claude Code recorded a compaction and
@@ -189,22 +190,27 @@ went in circles, stopped when the session ended) share one card.
 | Card | Fires when | The change |
 |---|---|---|
 | Finished with checks failing, or reported done without running the tests | A completed agent edited code and ran no test, build or lint after its last edit, or its last check failed | A line for its instructions naming the check this run used |
-| Agents wrote the same file | Two or more agents **running at the same time** wrote one file. Agents that took turns are a handoff, not a conflict | `isolation: worktree` for their definitions |
+| Agents wrote the same file | Two or more agents **running at the same time** wrote one file. Agents that took turns are a handoff, not a conflict, and an agent you resumed counts only for the stretches it worked. An agent that was cut off counts only until its last activity | `isolation: worktree` for their definitions |
 | The cache was rebuilt after a break | The prompt cache was written again from scratch after an idle gap | `/compact` before a long break, or `/clear` |
 | An agent ran without your project rules | An agent did not load rules files the main session had | Name them in its instructions or definition (if its definition sets `omitClaudeMd: true` this is expected) |
-| Pre-approve a command you kept approving | Permission prompts for the same test, build or lint command, or the same web domain, cost you a minute or came three or more times. Questions Claude asks you on purpose never count | A `permissions.allow` entry |
+| Pre-approve a command you approved 3 times (or more) | You approved the same kind of test, build or lint command, or the same web domain, at three or more permission prompts. One slow approval never makes a card: the time a prompt waited includes the approved command's own run time. Questions Claude asks you on purpose never count | A `permissions.allow` entry |
 | A cheaper model would likely have done (possible) | A finished agent only read and searched, on Opus or Sonnet, and the same tokens on the next cheaper model would have saved at least 30% and five cents | `model: sonnet` or `model: haiku` for its definition |
 | These agents could have run together (possible) | Agents of one parent ran one after another, each launched within two minutes of the previous one ending, with no prompt, handoff or shared file between them | Launch them in one message |
-| Took far longer than usual | A finished agent was past the 90th percentile of its kind and over twice the typical run (cost, or tokens when unpriced, the same way) | Names the cards that can explain it, or says none does |
+| Took far longer than usual | A finished agent was past the 90th percentile of its kind and over twice the typical run (cost, or tokens when unpriced, the same way) | Says when most of the extra time was the agent stopped by an API error or idle for over five minutes, names the cards that can explain it, or says none does |
 
 The pre-approve card is the one to read twice. It suggests a rule only for test, build and lint commands
 (npm, pnpm and yarn test, lint and build scripts, pytest, `python -m unittest`, go, cargo, make test and
 lint, ruff, mypy, tsc, eslint) run as a single plain command, and for web domains, and it says how far the
-rule reaches. **Pre-approving a test or build command runs whatever that command runs in your project
-(its tests, its build scripts), with any arguments, without asking again.** A command with `;`, `&`, `|`,
-a redirect or a substitution, any other command, and any domain that is not a plain name (an address,
-`localhost`, a name with a backslash or an `@`) gets a report-only card with no rule. Git read commands are
-not suggested: Claude Code does not ask about them.
+rule reaches. When you approved the same whole command every time, the rule is for exactly that command
+(`Bash(npm test -- --watch=false)`), and the card shows the wider rule (`Bash(npm test *)`) as an
+alternative. When the arguments differed, or the command has a parenthesis or an asterisk in it, the rule
+is for any arguments (`Bash(npm test *)`). **A rule for any arguments runs whatever those arguments make
+the tool run. Some arguments of these tools can run any program (for example `go test -exec`, `pytest -p`,
+`make -f`), not only your project's tests, and your project's own test and build scripts run without
+asking again.** A command with `;`, `&`, `|`, a redirect or a substitution, any other command, and any
+domain that is not a plain name (an address, `localhost`, a name with a backslash or an `@`) gets a
+report-only card with no rule, and so does a web address the log kept only the start of. Git read
+commands are not suggested: Claude Code does not ask about them.
 
 **What an agent usually costs.** From the sessions Claude Code already keeps (about 30 days), Cuelight
 works out, for each agent type and model, the typical run (the middle one), the slow case (the 90th
@@ -517,7 +523,7 @@ ignored in favour of the default.
 | Variable | Default | Meaning |
 |---|---|---|
 | `ORCHESTRA_STALL_SECONDS` | 300 | An agent with an open round and no activity this long reads as `stalled` |
-| `ORCHESTRA_SESSION_LIVE_SECONDS` | 600 | A session whose transcript was touched this recently counts as live |
+| `ORCHESTRA_SESSION_LIVE_SECONDS` | 600 | A session whose transcript, or any of its agents' transcripts, was written this recently counts as live (a background agent can work while the main thread is idle) |
 | `ORCHESTRA_HUB_FILE_THRESHOLD` | 3 | A file read by more agents than this, written by none, is shared context |
 | `ORCHESTRA_HANDOFF_CONTAINMENT` | 0.15 | Text-reuse score (0-1) at which a handoff edge is inferred |
 | `ORCHESTRA_HANDOFF_RUN_WORDS` | 40 | A shared run this many words long also infers a handoff |

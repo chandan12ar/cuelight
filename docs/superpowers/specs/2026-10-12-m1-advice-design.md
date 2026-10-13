@@ -277,29 +277,52 @@ where the two disagree, this section is right.
 - **Failure cards.** An API error is the cause only when it was not recovered from. "Ran out of context" is
   `sure` when a compaction is recorded and `possible` when only the assumed window's fill reached 95%; loops
   are `possible`. A stalled agent with a call still open is "went quiet during a tool call". Cards with the
-  same cause and fix in several agents merge.
+  same cause and fix in several agents merge. A usage limit says: "Wait for the limit to reset, or do what the
+  message says (switch model or add credits), then resume the agent." The API's own message is shown after
+  its trailing period is dropped, so the sentence never ends in "..". An agent's description is read as one
+  line (white space collapsed, cut at 60 characters), so a line break in it cannot reach the fact sheet.
 - **Verify** cards are for completed agents only (a failed or cut-off agent has its failure card). A failing
   check is keyed by its own command, and the command in a snippet is its first line, never a cut-off one.
-- **Worktree** cards appear only when the writers of a file were running at the same time. Agents that took
-  turns on a file are a handoff.
+- **Worktree** cards appear only when the writers of a file were running at the same time, compared round by
+  round: an agent resumed after a pause is not taken to have worked in between, and a round with no end runs
+  until now only while the agent is running, waiting or stalled (else until its last activity). A writer with
+  no known start (or a round with none) still counts as overlapping. Agents that took turns on a file are a
+  handoff.
+- **Agents that work in the background stay running.** A session counts as live while any agent's transcript
+  has had an entry in the last ten minutes, not only the main transcript (a `SessionEnd` event still ends it
+  at once), so a background subagent that outlasts an idle main thread is not shown as failed or cut off and
+  gets no "Stopped when the session ended" card.
 - **Pre-approve.** Questions Claude asks on purpose (`AskUserQuestion`, `ExitPlanMode`) never count. Git
   `status`, `diff` and `log` are not on the list, because Claude Code never asks about them. A Bash rule needs
   the whole command (a single plain line, no `; & | > <`, backtick or `$(`); a WebFetch rule needs a strict
   host check (no backslash or `@`, a dotted name ending in letters, no IP address or `localhost`, a URL under
-  160 characters on one line). Every suggested rule says how far it reaches, since it allows any arguments and
-  runs project code. A card shows at 60 seconds or at 3 prompts. A command that is not on the allow-list
-  (or a Bash command or URL whose whole text is not known) gets a report-only card with no snippet.
+  160 characters on one line). Every suggested rule says how far it reaches. A card, rule or report-only,
+  needs 3 prompts and never shows on seconds alone: a wait's seconds include the approved command's own run
+  time (the `Wait` docstring in `livestate.py`), so one slow approval says nothing about habit. Its title
+  carries the count ("Pre-approve a command you approved 4 times", "You approved `git` 4 times") and its text
+  says the time includes the command's own run time. When every wait in the group was the same whole command
+  and it has none of `( ) *`, the rule is that exact command and the text offers `Bash(<prefix> *)` as the
+  alternative; otherwise the rule is `Bash(<prefix> *)` and the text says it allows any arguments and that
+  some arguments of these tools can run any program (for example `go test -exec`, `pytest -p`, `make -f`),
+  not only the project's tests. A WebFetch group is keyed by whether the URL was whole as well as its host,
+  so a cut URL and a whole one are separate cards, and a report-only card for a cut URL names no host. A
+  command that is not on the allow-list (or a Bash command or URL whose whole text is not known) gets a
+  report-only card with no snippet.
 - **Could have run together.** Only agents launched within 2 minutes of the previous one ending, with no
   prompt, handoff or shared file between them; all groups share one card.
 - **Far over usual.** Time, else cost, else tokens when unpriced, and only for completed agents. A card names
   only the cards that can explain it (a time overage: pre-approve; cost or tokens: cache rebuilt or
-  pre-approve) or says none does, and agents that nothing explains share one card per kind. A running agent
-  far over usual goes in the Health box as SLOWER THAN USUAL, not in a replay.
+  pre-approve) or says none does, and agents that nothing explains share one card per kind. For a time
+  overage the agent's own record counts as an explanation too: the time from each API error to the agent's
+  next reply, plus each gap of more than 300 seconds between consecutive tool calls (or model calls, when it
+  made no tool call), with overlaps counted once. When that is at least half of the overage the card stays
+  its own card and says "It spent <t> stopped by an API error or idle; that, not its tool calls, is most of
+  the overage." A running agent far over usual goes in the Health box as SLOWER THAN USUAL, not in a replay.
 - **Order and counts.** Cards are ordered failure, then fix, then information, each by cost, time, tokens;
   at most 12. The verdict's "N things to fix" and the tab badge count only failures and cards with a real
   fix, so an information card is not counted; the badge is red when a failure card is shown.
 - **Always shown.** Failure, unchecked-work, same-file and missing-rules cards show whatever their size, since
-  their cost is a risk; so does a pre-approve card with 3 or more prompts.
+  their cost is a risk; so does every pre-approve card, which exists only at 3 or more prompts.
 - **Carried but not shown.** The skipped-tests rate is in the payload, not on screen.
 - **Smaller shape changes.** A card's `impact` is `{seconds, tokens, cost, label}`; the currency is on the
   cost block (`run.cost`), and the advice block carries `priced_by` and `as_of`, not each card. `estimate` prints one
