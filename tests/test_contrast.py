@@ -89,6 +89,30 @@ class TestContrast(unittest.TestCase):
                 ratio = contrast(t[status], t["panel"])
                 self.assertGreaterEqual(ratio, 3.0, "{} {} mark: {:.2f}".format(name, status, ratio))
 
+    def rule_value(self, selector, prop):
+        """The value a CSS rule gives a property (the first rule for exactly this selector), or None."""
+        css = read_css()
+        match = re.search(r"(?m)^" + re.escape(selector) + r"\s*\{([^}]*)\}", css)
+        found = re.search(r"(?<![-\w])" + prop + r":\s*([^;]+);", match.group(1) + ";") if match else None
+        return found.group(1).strip() if found else None
+
+    def resolve(self, value, theme):
+        token = re.fullmatch(r"var\(--([a-z0-9-]+)\)", value)
+        color = theme[token.group(1)] if token else value
+        short = re.fullmatch(r"#([0-9a-fA-F])([0-9a-fA-F])([0-9a-fA-F])", color)
+        return "#" + "".join(c * 2 for c in short.groups()) if short else color
+
+    def test_the_failure_badge_text_is_readable_in_both_themes(self):
+        # A red count on the Advice tab: in dark mode the failure colour is light, so white text on it is not.
+        background = self.rule_value(".badge.badge-fail", "background")
+        text = self.rule_value(".badge.badge-fail", "color") or self.rule_value(".badge", "color")
+        self.assertIsNotNone(background)
+        self.assertIsNotNone(text)
+        for name, t in self.each_theme():
+            ratio = contrast(self.resolve(text, t), self.resolve(background, t))
+            self.assertGreaterEqual(ratio, 4.5, "{} failure badge {} on {}: {:.2f}".format(
+                name, text, background, ratio))
+
     def test_borders_are_visible_against_the_page(self):
         for name, t in self.each_theme():
             self.assertGreaterEqual(contrast(t["line-strong"], t["panel"]), 1.4, name)

@@ -98,9 +98,13 @@ function renderAdvice(run) {
   const box = $("advice");
   if (!box) return;
   if (state.usual === undefined && !state.offline) loadUsual();     // opened straight from a link
-  const spot = noteFocus(box);
   const a = run.advice;
-  box.innerHTML = adviceHtml(run, adviceHidden(), !!state.adviceShowHidden) + adviceUsualHtml(state.usual);
+  const html = adviceHtml(run, adviceHidden(), !!state.adviceShowHidden) + adviceUsualHtml(state.usual);
+  // The page redraws every few seconds: leave identical markup (and its handlers, selection and scroll) alone.
+  if (box.dataset && box.dataset.html === html) return;
+  const spot = noteFocus(box);
+  if (box.dataset) box.dataset.html = html;
+  box.innerHTML = html;
   for (const el of box.querySelectorAll("[data-agent]")) el.onclick = () => openDrawer(el.getAttribute("data-agent"));
   for (const btn of box.querySelectorAll("[data-copy]")) {
     btn.onclick = () => {

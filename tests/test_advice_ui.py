@@ -7,7 +7,7 @@ from tests import test_insights_ui as ui
 
 FNS = ("esc", "fmtDuration", "fmtCount", "fmtMoney", "plural", "priceNote", "adviceHidden", "setAdviceHidden",
        "adviceImpact", "adviceAgents", "adviceCardHtml", "adviceHtml", "renderAdviceBadge",
-       "usualText", "adviceUsualHtml")
+       "usualText", "adviceUsualHtml", "renderAdvice")
 CONSTS = ("ADVICE_HIDDEN_KEY", "ADVICE_WHERE")
 STORAGE = ("global.localStorage = {data: {}, getItem(k) { return k in this.data ? this.data[k] : null; },"
            " setItem(k, v) { this.data[k] = String(v); }};\n")
@@ -93,6 +93,34 @@ class TestAdviceTab(unittest.TestCase):
                 % json.dumps(s))
         hidden, text, cls = ui.run_js(FNS, CONSTS, body)
         self.assertEqual((hidden, text, cls), (False, "1", {"badge-fail": True}))
+
+    def draw(self, *runs):
+        """renderAdvice for each run in turn, on a box that counts how often its markup is written."""
+        body = ("state.usual = {state: 'off'};          // nothing to load, nothing drawn under the cards\n"
+                "box.dataset = {};\n"
+                "let writes = 0, markup = '';\n"
+                "Object.defineProperty(box, 'innerHTML', {get() { return markup; }, set(v) { writes += 1; markup = v; }});\n"
+                "for (const run of %s) renderAdvice(run);\n"
+                "console.log(JSON.stringify({writes: writes, markup: markup}));" % json.dumps(list(runs)))
+        return ui.run_js(FNS, CONSTS, body)
+
+    def test_the_same_run_drawn_again_leaves_the_page_alone(self):
+        # The dashboard redraws every few seconds: rewriting identical markup would drop a selection, a
+        # scroll position and the "Copied!" a button is showing.
+        s = self.with_cards([card(fix={"where": "settings", "text": "t", "snippet": "{}"})])
+        once = self.draw(s)
+        self.assertEqual(once["writes"], 1)
+        self.assertIn("advice-card", once["markup"])
+        again = self.draw(s, json.loads(json.dumps(s)), s)
+        self.assertEqual(again["writes"], 1)
+        self.assertEqual(again["markup"], once["markup"])
+
+    def test_a_changed_run_is_drawn(self):
+        first = self.with_cards([card()])
+        second = self.with_cards([card(), card(id="def456def456", title="Other")])
+        out = self.draw(first, first, second, second)
+        self.assertEqual(out["writes"], 2)
+        self.assertEqual(out["markup"].count('class="advice-card"'), 2)
 
     def badge_of(self, cards):
         body = (STORAGE + "box.cls = {}; box.classList = {toggle(c, on) { box.cls[c] = on; }};\n"
