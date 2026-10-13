@@ -22,7 +22,7 @@ from orchestra import pressure
 from orchestra import verify
 from orchestra import waste as waste_mod
 from orchestra.edges import normalize_path
-from orchestra.errors import TARGET_CUT
+from orchestra.errors import TARGET_CUT, _union
 from orchestra.redact import scrub
 from orchestra.runaway import detect_loop
 from orchestra.spend import _short
@@ -74,7 +74,8 @@ def _plural(n: int, one: str, many: str = "") -> str:
 
 
 def _label(agent: Any) -> str:
-    return scrub(agent.description)[:60] or agent.agent_id[:12]
+    """A description on one line: a line break in it would end its line of the fact sheet handed to Claude."""
+    return " ".join(scrub(agent.description).split())[:60] or agent.agent_id[:12]
 
 
 def _fresh(tokens: Optional[Dict[str, int]]) -> int:
@@ -152,7 +153,8 @@ def _select(cards: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
 # ------------------------------------------------------------------ failures
 
 API_FIX = {
-    "rate_limit": ("a usage limit", "Wait for the limit to reset, then resume the agent."),
+    "rate_limit": ("a usage limit", "Wait for the limit to reset, or do what the message says (switch model or "
+                                    "add credits), then resume the agent."),
     "authentication_failed": ("an expired login", "Run /login, then resume the agent."),
     "server_error": ("a server error", "The API failed on Anthropic's side. Run the agent again."),
     "overloaded": ("an overloaded API", "The API was overloaded. Run the agent again in a few minutes."),
@@ -180,7 +182,7 @@ def _failure(agent: Any, now: float) -> Dict[str, Any]:
         kind = last_api.get("kind") or "error"
         what, fix = API_FIX.get(kind, ("an API error", "Run the agent again. If it happens again, read the "
                                                        "error above."))
-        message = scrub(last_api.get("text") or "")[:160]
+        message = scrub(last_api.get("text") or "")[:160].rstrip(" .")      # the sentence below ends in its own period
         return card("api-" + kind, "Stopped by " + what, "{n} agents stopped by " + what,
                     "{} {} right after the API returned {}{}.".format(label, verb, what,
                                                                      ": " + message if message else ""),
@@ -304,21 +306,39 @@ def _verify_cards(run: Any, now: float, table: Any) -> List[Dict[str, Any]]:
     return out
 
 
+STILL_WORKING = (C.RUNNING, C.WAITING, C.STALLED)
+
+
+def _working_spans(agent: Any, now: float) -> Optional[List[tuple]]:
+    """When an agent was working: one (start, end) for each of its rounds, so a resumed agent is not taken
+    to have worked in between. A round with no end runs until `now` only while the agent is still going;
+    otherwise it ended at the agent's last activity (at its start, when that is not known). None when a
+    round's start is not known, which the caller counts as overlapping."""
+    spans = []
+    for r in agent.rounds:
+        if r.started_at is None:
+            return None
+        end = r.ended_at
+        if end is None:
+            if agent.status in STILL_WORKING:
+                end = now
+            else:
+                end = agent.last_activity_at if agent.last_activity_at is not None else r.started_at
+        spans.append((r.started_at, max(end, r.started_at)))
+    return spans or None
+
+
 def _overlapped(run: Any, writers: List[str], now: float) -> bool:
-    """True when at least two of the writers were running at the same time. An agent still running
-    runs until `now`; one with no known start (or not in the run) counts as overlapping, so it is
-    never silently dropped. Writers that took turns are a handoff, not a conflict."""
+    """True when at least two of the writers were working at the same time, round by round. A writer with no
+    known start (or not in the run) counts as overlapping, so it is never silently dropped. Writers that
+    took turns are a handoff, not a conflict."""
     spans = []
     for writer in writers:
         agent = run.agent(writer)
-        start = agent.started_at if agent is not None else None
-        if start is None:
-            spans.append(None)
-        else:
-            spans.append((start, agent.ended_at if agent.ended_at is not None else now))
+        spans.append(_working_spans(agent, now) if agent is not None else None)
     for i, a in enumerate(spans):
         for b in spans[i + 1:]:
-            if a is None or b is None or (a[0] < b[1] and b[0] < a[1]):
+            if a is None or b is None or any(s0 < e1 and s1 < e0 for s0, e0 in a for s1, e1 in b):
                 return True
     return False
 
@@ -398,8 +418,15 @@ URL_HOST = re.compile(r"^https?://(?P<host>[a-z0-9.-]+)(?::[0-9]+)?(?:[/?#]|$)")
 LABEL = re.compile(r"[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?")   # 1 to 63 characters, no dash at either end
 TOP_LABEL = re.compile(r"[a-z]+")                              # a domain's last label is a word, never a number
 # What an allow rule for each tool says it reaches, shown on the card so no one reads it as narrower.
-SCOPE = {"Bash": "This allows any arguments, and runs code from your project (its tests or build scripts).",
+RUNS_ANY = ("Some arguments of these tools can run any program (for example go test -exec, pytest -p, make -f), "
+            "not only your project's tests.")
+SCOPE = {"Bash": "This allows any arguments. " + RUNS_ANY,
          "WebFetch": "This allows any page on that domain."}
+EXACT_BASH = "To allow any arguments instead: Bash({prefix} *). " + RUNS_ANY
+# A command with one of these in it cannot be written into a rule as it is: they mean something inside one.
+RULE_MARKS = ("(", ")", "*")
+# A wait holds the approved command's own run time, so one slow approval says nothing about habit: a card
+# needs this many prompts, however many seconds they add up to.
 PROMPTS_ENOUGH = 3
 # Tools that ask you something by design: answering is the point, and no rule could answer for you.
 ASKS_THE_USER = frozenset(("AskUserQuestion", "ExitPlanMode"))
@@ -467,46 +494,56 @@ def _preapprove_cards(run: Any, now: float, table: Any) -> List[Dict[str, Any]]:
         if tool in ASKS_THE_USER:
             continue
         whole = call is not None and _is_whole(target, call[5])
-        shown, allow = "", None
+        shown, allow, prefix = "", None, None
         if tool == "Bash":
             prefix = safe_prefix(target) if whole else None
             shown = prefix or (target.split()[0] if target.split() else "a command")
             key = "preapprove:Bash:" + (prefix or "other:" + shown)
             allow = "Bash({} *)".format(prefix) if prefix else None
         elif tool == "WebFetch":
-            host = _host(target)
+            # A cut URL is not a page we know, so its host is not named and it never shares a card with a whole one.
+            host = _host(target) if whole else ""
             shown = host
-            key = "preapprove:WebFetch:" + host
-            allow = "WebFetch(domain:{})".format(host) if whole and host else None
+            key = "preapprove:WebFetch:" + ("whole:" + host if whole else "cut")
+            allow = "WebFetch(domain:{})".format(host) if host else None
         else:
             key = "preapprove:" + tool
-        g = groups.setdefault(key, {"tool": tool, "shown": shown, "allow": allow, "seconds": 0.0, "prompts": 0,
-                                    "agents": []})
+        g = groups.setdefault(key, {"tool": tool, "shown": shown, "allow": allow, "prefix": prefix, "commands": set(),
+                                    "seconds": 0.0, "prompts": 0, "agents": []})
+        if prefix:
+            g["commands"].add(target)
         g["seconds"] += wait.seconds(now)
         g["prompts"] += wait.prompts
         if wait.agent_id not in g["agents"]:
             g["agents"].append(wait.agent_id)
     out = []
     for key, g in groups.items():
+        if g["prompts"] < PROMPTS_ENOUGH:
+            continue
         shown = scrub(g["shown"])[:80]
         what = "`{}`".format(shown) if g["tool"] == "Bash" else (g["tool"] + " " + shown).strip()
-        happened = "Waited {} over {} for {}.".format(fmt_duration(g["seconds"]),
-                                                      _plural(g["prompts"], "permission prompt"), what)
-        enough = g["prompts"] >= PROMPTS_ENOUGH
+        happened = "Waited up to {} over {} for {} (the time includes the command's own run time).".format(
+            fmt_duration(g["seconds"]), _plural(g["prompts"], "permission prompt"), what)
         if g["allow"]:
-            out.append(_card(key, "preapprove", "sure", "fix", "Pre-approve a command you kept approving", happened,
-                             g["agents"], "settings",
+            allow, scope = g["allow"], SCOPE[g["tool"]]
+            # The same whole command every time is what you approved; a rule for any arguments is for you to choose.
+            if g["prefix"] and len(g["commands"]) == 1:
+                (command,) = g["commands"]
+                if not any(mark in command for mark in RULE_MARKS):
+                    allow, scope = "Bash({})".format(command), EXACT_BASH.format(prefix=g["prefix"])
+            out.append(_card(key, "preapprove", "sure", "fix", "Pre-approve a command you approved {} times".format(
+                                 g["prompts"]), happened, g["agents"], "settings",
                              "Add this to .claude/settings.json (everyone on the project) or "
-                             ".claude/settings.local.json (just you), merged with any rules already there: "
-                             + SCOPE[g["tool"]],
-                             json.dumps({"permissions": {"allow": [g["allow"]]}}, indent=2),
-                             seconds=g["seconds"], label="waiting on you", always=enough))
+                             ".claude/settings.local.json (just you), merged with any rules already there. " + scope,
+                             json.dumps({"permissions": {"allow": [allow]}}, indent=2),
+                             seconds=g["seconds"], label="waiting on you", always=True))
         else:
-            out.append(_card(key, "preapprove", "sure", "info", "You kept approving " + what, happened, g["agents"],
+            out.append(_card(key, "preapprove", "sure", "info", "You approved {} {} times".format(what, g["prompts"]),
+                             happened, g["agents"],
                              "none", "Not suggested for pre-approval: allowing it for good would also allow {} "
                                      "you have not seen. Consider whether the agent needs it.".format(
                                          "commands" if g["tool"] == "Bash" else "ones"),
-                             seconds=g["seconds"], label="waiting on you", always=enough))
+                             seconds=g["seconds"], label="waiting on you", always=True))
     return out
 
 
@@ -622,9 +659,30 @@ def _far_over(value: float, typical: Optional[float], slow: Optional[float]) -> 
     return typical is not None and slow is not None and typical > 0 and value > slow and value > OVER_RATIO * typical
 
 
+IDLE_GAP_S = 300.0        # no tool call (or model call) for longer than this is the agent standing idle
+
+
+def _stopped_s(agent: Any) -> float:
+    """Seconds the agent's own record shows it stopped: waiting out an API error until its next reply, or idle
+    (more than IDLE_GAP_S between consecutive tool calls, or between model calls when it made no tool call).
+    A stop that is also a gap between calls counts once."""
+    spans = []
+    log = agent.errors
+    for e in (log.api if log is not None else []):
+        if e.get("at") is not None and e.get("resumed_at") is not None and e["resumed_at"] > e["at"]:
+            spans.append((e["at"], e["resumed_at"]))
+    times = sorted(c.timestamp for c in agent.tool_calls if c.timestamp is not None)
+    if not agent.tool_calls and agent.waste is not None:
+        times = sorted(v[0] for v in agent.waste.calls.values() if v[0] is not None)
+    spans += [(a, b) for a, b in zip(times, times[1:]) if b - a > IDLE_GAP_S]
+    return _union(spans)
+
+
 def _over_usual_cards(run: Any, now: float, table: Any) -> List[Dict[str, Any]]:
     """A finished agent far over what its kind usually takes: in time, else in cost, else (when it or the usual
-    has no cost) in tokens. `over` is kept on the raw card, for _explain_over_usual; _finish drops it."""
+    has no cost) in tokens. `over` and `stopped` are kept on the raw card, for _group_unexplained and
+    _explain_over_usual; _finish drops them. `stopped` is the time the agent's own record shows it stopped, when
+    that is at least half of a time overage (else 0)."""
     out = []
     for agent in run.agents:
         u = agent.usual
@@ -658,6 +716,8 @@ def _over_usual_cards(run: Any, now: float, table: Any) -> List[Dict[str, Any]]:
                      tokens=max(0, fresh - int(u["typical_tokens"])) if heavy and not long else 0,
                      cost=(agent.cost - u["typical_cost"]) if dear else None, label="over usual")
         card["over"] = over
+        stopped = _stopped_s(agent) if long else 0.0
+        card["stopped"] = stopped if stopped >= 0.5 * (d - u["typical_s"]) else 0.0
         out.append(card)
     return out
 
@@ -668,7 +728,8 @@ EXPLAINS = {"time": ("preapprove",), "cost": ("compact", "preapprove"), "tokens"
 
 
 def _explain_over_usual(cards: List[Dict[str, Any]]) -> None:
-    """An over-usual card points to the shown cards on the same agent that can explain its overage."""
+    """An over-usual card says what explains its overage: the agent's own stop (an API error or idle) when that
+    is most of it, and the shown cards on the same agent that can explain it."""
     for card in cards:
         if card["rule"] != "over_usual":
             continue
@@ -676,8 +737,14 @@ def _explain_over_usual(cards: List[Dict[str, Any]]) -> None:
         titles = [c["title"] for c in cards
                   if c["rule"] in rules and set(c["agents"]) & set(card["agents"])]
         others = list(dict.fromkeys(titles))
-        card["fix"]["text"] = ("Other cards here explain part of it: " + "; ".join(others) + "." if others else
-                               "No other card explains it. Open the agent and look at its longest tool calls.")
+        parts = []
+        if card.get("stopped"):
+            parts.append("It spent {} stopped by an API error or idle; that, not its tool calls, is most of the "
+                         "overage.".format(fmt_duration(card["stopped"])))
+        if others:
+            parts.append("Other cards here explain part of it: " + "; ".join(others) + ".")
+        card["fix"]["text"] = " ".join(parts) or ("No other card explains it. Open the agent and look at its "
+                                                  "longest tool calls.")
 
 
 UNEXPLAINED_MANY = {"time": "{n} agents took far longer than usual", "cost": "{n} agents cost far more than usual",
@@ -685,13 +752,13 @@ UNEXPLAINED_MANY = {"time": "{n} agents took far longer than usual", "cost": "{n
 
 
 def _group_unexplained(cards: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-    """Over-usual cards that no raw card can explain say the same thing about different agents, so they
-    share one key per kind and merge into one card. One that something explains stays its own card, which
-    names what explains it."""
+    """Over-usual cards that nothing explains say the same thing about different agents, so they share one
+    key per kind and merge into one card. One that something explains (a raw card on the same agent, or its
+    own stop) stays its own card, which names what explains it."""
     out = []
     for card in cards:
         kind = card.get("over")
-        if card["rule"] == "over_usual" and kind in EXPLAINS and not any(
+        if card["rule"] == "over_usual" and kind in EXPLAINS and not card.get("stopped") and not any(
                 c["rule"] in EXPLAINS[kind] and set(c["agents"]) & set(card["agents"]) for c in cards):
             card = dict(card, key="over_usual:{}:unexplained".format(kind), title_many=UNEXPLAINED_MANY[kind])
         out.append(card)
