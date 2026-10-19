@@ -1,0 +1,346 @@
+{
+ "title": "Cuelight - 90-second product tour",
+ "stages": {
+  "intro": {
+   "eyebrow": "Right now, in your terminal",
+   "title": "13 agents are running. **Which one needs you?**",
+   "items": [
+    {
+     "k": "Waiting",
+     "v": "Claude needs your permission to use Bash"
+    },
+    {
+     "k": "Failed",
+     "v": "Write the unit tests: npm test failed"
+    },
+    {
+     "k": "Possible loop",
+     "v": "npm run e2e, thirteen times in a row"
+    }
+   ]
+  },
+  "problem": {
+   "eyebrow": "The problem",
+   "title": "Multi-agent work runs **in the dark**",
+   "items": [
+    {
+     "v": "Agents sit waiting on you, and you never notice"
+    },
+    {
+     "v": "Loops and retries quietly burn tokens"
+    },
+    {
+     "v": "The bill shows up after the damage is done"
+    }
+   ]
+  },
+  "solution": {
+   "align": "center",
+   "mark": true,
+   "eyebrow": "Meet",
+   "title": "**Cuelight**",
+   "sub": "Mission control for your Claude Code agents",
+   "chips": [
+    "Local and private",
+    "Zero setup",
+    "Live, across every session"
+   ]
+  },
+  "outro": {
+   "align": "center",
+   "mark": true,
+   "title": "Stop guessing. **Start seeing.**",
+   "sub": "Cuelight: free, local, nothing to install but the plugin",
+   "cmd": "/plugin install cuelight@cuelight-marketplace",
+   "url": "github.com/chandan12ar/cuelight"
+  }
+ },
+ "beats": [
+  {
+   "chapter": "Hook",
+   "say": "You just launched a dozen Claude Code agents. One needs your permission. One failed. One is looping. Which one?",
+   "do": [
+    {
+     "eval": "document.body.style.paddingBottom = '900px'"
+    },
+    {
+     "wait": 0.6
+    },
+    {
+     "reveal": "over"
+    }
+   ]
+  },
+  {
+   "chapter": "The problem",
+   "say": "In a scrolling terminal, you'd never know. Agents sit waiting, loops burn tokens, and the bill comes later.",
+   "do": [
+    {
+     "stage": "problem"
+    },
+    {
+     "reveal": "over"
+    }
+   ]
+  },
+  {
+   "chapter": "Meet Cuelight",
+   "say": "Meet Cuelight: mission control for your Claude Code agents. Local, private, and live.",
+   "do": [
+    {
+     "stage": "solution"
+    },
+    {
+     "reveal": "over"
+    }
+   ]
+  },
+  {
+   "chapter": "Needs you",
+   "say": "The moment an agent needs you, fails, stalls or loops, Cuelight tells you, in plain words.",
+   "do": [
+    {
+     "stage": null
+    },
+    {
+     "badge": "{BADGE}"
+    },
+    {
+     "spot": "#attention",
+     "label": "Needs you now"
+    },
+    {
+     "wait": 1.6
+    },
+    {
+     "spot": "#health",
+     "label": "Worst first"
+    },
+    {
+     "hover": "#health"
+    }
+   ]
+  },
+  {
+   "say": "The pulse is the run's heartbeat: agents, tool calls, tokens, and who's waiting.",
+   "do": [
+    {
+     "spot": null
+    },
+    {
+     "scroll": "#pulse",
+     "ms": 1100
+    },
+    {
+     "spot": "#pulse",
+     "label": "Live pulse"
+    },
+    {
+     "sweep": "#pulse",
+     "over": true
+    }
+   ]
+  },
+  {
+   "chapter": "Timeline",
+   "say": "Timeline: every agent as a bar in time, with the critical path outlined.",
+   "do": [
+    {
+     "spot": null
+    },
+    {
+     "eval": "V.scrollTo(document.querySelector('nav.tabs').getBoundingClientRect().top + scrollY - 128, 1100)"
+    },
+    {
+     "spot": "#timeline",
+     "label": "Timeline"
+    },
+    {
+     "sweep": "#timeline",
+     "over": true
+    }
+   ]
+  },
+  {
+   "chapter": "Graph",
+   "say": "Graph: who fed whom, and which output became the next agent's input.",
+   "do": [
+    {
+     "spot": null
+    },
+    {
+     "click": "nav.tabs button[data-view=graph]"
+    },
+    {
+     "wait": 0.4
+    },
+    {
+     "sweep": "#graph",
+     "over": true
+    }
+   ]
+  },
+  {
+   "chapter": "Agents",
+   "say": "Agents: what each one was asked, next to what it actually delivered.",
+   "do": [
+    {
+     "click": "nav.tabs button[data-view=agents]"
+    },
+    {
+     "wait": 0.5
+    },
+    {
+     "spot": "table.agents-table tbody tr:nth-child(5)",
+     "label": "Asked vs. delivered"
+    }
+   ]
+  },
+  {
+   "chapter": "Insights",
+   "say": "Insights: parallelism, wasted tokens, and whether agents really checked their work.",
+   "do": [
+    {
+     "spot": null
+    },
+    {
+     "click": "nav.tabs button[data-view=insights]"
+    },
+    {
+     "wait": 0.4
+    },
+    {
+     "spot": "nav.glance",
+     "label": "Insights at a glance"
+    },
+    {
+     "wait": 1.4
+    },
+    {
+     "spot": null
+    },
+    {
+     "scroll": "#insights section.card.wide",
+     "ms": 1200
+    }
+   ]
+  },
+  {
+   "chapter": "Spend",
+   "say": "Spend: cost by the minute, and the exact moment you crossed your budget.",
+   "do": [
+    {
+     "eval": "V.scrollTo(document.querySelector('nav.tabs').getBoundingClientRect().top + scrollY - 128, 700)"
+    },
+    {
+     "click": "nav.tabs button[data-view=spend]"
+    },
+    {
+     "wait": 0.4
+    },
+    {
+     "spot": ".spend-plot",
+     "label": "Running cost vs. budget"
+    },
+    {
+     "sweep": ".spend-plot",
+     "over": true
+    }
+   ]
+  },
+  {
+   "chapter": "Prompts",
+   "say": "Prompts: every message you sent, and the agents, time and money it set off.",
+   "do": [
+    {
+     "spot": null
+    },
+    {
+     "click": "nav.tabs button[data-view=prompts]"
+    },
+    {
+     "wait": 0.4
+    },
+    {
+     "spot": "ol.prompt-list",
+     "label": "Cost per prompt"
+    }
+   ]
+  },
+  {
+   "chapter": "Activity",
+   "say": "Activity: search every tool call, file and command, instantly.",
+   "do": [
+    {
+     "spot": null
+    },
+    {
+     "click": "nav.tabs button[data-view=activity]"
+    },
+    {
+     "click": "#calls-q"
+    },
+    {
+     "eval": "(async () => { const i = document.querySelector('#calls-q'); i.focus(); for (const ch of 'npm test') { i.value += ch; i.dispatchEvent(new Event('input', {bubbles: true})); await new Promise(r => setTimeout(r, 110)); } })()"
+    }
+   ]
+  },
+  {
+   "chapter": "Work Floor",
+   "say": "Work Floor: your agents at their desks, live, at a glance.",
+   "do": [
+    {
+     "click": "nav.tabs button[data-view=workfloor]"
+    },
+    {
+     "wait": 0.3
+    },
+    {
+     "scroll": "#workfloor section.floor-group:nth-child(2)",
+     "center": true,
+     "ms": 1300
+    },
+    {
+     "hover": "#workfloor section.floor-group:nth-child(2) .agent-card:nth-child(1)"
+    }
+   ]
+  },
+  {
+   "chapter": "Fleet",
+   "say": "And Fleet: every Claude Code session on your machine, in one place.",
+   "do": [
+    {
+     "eval": "V.scrollTo(document.querySelector('nav.tabs').getBoundingClientRect().top + scrollY - 128, 900)"
+    },
+    {
+     "click": "nav.tabs button[data-view=fleet]"
+    },
+    {
+     "wait": 0.3
+    },
+    {
+     "spot": "#fleet",
+     "label": "Every session"
+    }
+   ]
+  },
+  {
+   "chapter": "Get it",
+   "say": "Cuelight. Stop guessing, start seeing. Install it with one command.",
+   "do": [
+    {
+     "spot": null
+    },
+    {
+     "badge": null
+    },
+    {
+     "stage": "outro"
+    },
+    {
+     "reveal": "over"
+    }
+   ]
+  }
+ ]
+}
