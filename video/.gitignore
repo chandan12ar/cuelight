@@ -1,0 +1,7 @@
+out/
+work/
+shots/
+plan.html
+script.draft.json
+__pycache__/
+state.json

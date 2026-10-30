@@ -1,0 +1,18 @@
+{
+  "_how_to_use": "Short narrated launch video, 30-60 s (tone launch). Hook card, then the product WORKING within ~10 s (type or click, the result appears), 2-3 highlights shown live, outro card with the URL. Every number and name must come from the product. Write video/plan.md first (references/inspect.md); delete beats you do not need.",
+  "title": "TODO product - launch",
+  "tone": "launch",
+  "share": "TODO: 1-3 sentences for the post, specific to this product, in its own words",
+  "stages": {
+    "hook": {"align": "center", "mark": true, "eyebrow": "TODO New / Introducing", "title": "TODO **Product**", "sub": "TODO the payoff, 8 words max"},
+    "outro": {"align": "center", "mark": true, "title": "TODO **Product**", "sub": "TODO available now / who it is for", "url": "TODO url"}
+  },
+  "beats": [
+    {"chapter": "Hook", "say": "TODO: the problem or the payoff in one short sentence. Never 'Welcome to'.", "do": [{"stage": "hook"}, {"wait": 0.8}]},
+    {"chapter": "See it work", "say": "TODO: the key action, said while it happens on screen.", "do": [{"stage": null}, {"wait": 0.5}, {"type": "TODO input selector", "text": "TODO realistic input", "over": true}]},
+    {"say": "TODO: the result appearing, and what it means for the viewer.", "do": [{"spot": "TODO result element", "label": "TODO 1-3 words"}]},
+    {"chapter": "Highlights", "say": "TODO: highlight one - shown, not described.", "do": [{"spot": null}, {"click": "TODO target"}, {"spot": "TODO target", "label": "TODO"}]},
+    {"say": "TODO: highlight two.", "do": [{"spot": null}, {"scroll": "TODO target", "ms": 1200}, {"spot": "TODO target", "label": "TODO"}]},
+    {"chapter": "Get it", "say": "TODO: the name, then where to get it.", "do": [{"spot": null}, {"stage": "outro"}, {"wait": 1.0}]}
+  ]
+}

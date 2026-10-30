@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Terminal</title>
+<!-- A scripted terminal for recording CLI tools with the same pipeline as a web app.
+     Serve this file (python3 -m http.server) and drive it from the storyboard with the `eval` action:
+       {"eval": "T.run([['cmd','npm install acme'],['out','added 42 packages in 3s'],['cmd','acme init'],['out',['Created acme.config.json','Ready.']]])"}
+     T.cmd(text)    types a command after the prompt, then "presses Enter"
+     T.out(text|[lines], {delay})   prints output lines one by one (delay ms between lines, default 120)
+     T.comment(text) prints a dim comment line      T.clear()   clears the screen      T.wait(ms)
+     Colours in output: wrap with {g}green{/} {r}red{/} {y}yellow{/} {b}blue{/} {d}dim{/}
+     Use the real output of the real tool: run it once, paste what it printed. Never invent output. -->
+<style>
+:root{--bg:#0f1117;--fg:#d7dae0;--acc:#7ee787;--bar:#1b1e27}
+html,body{margin:0;height:100%;background:#0a0b0f;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+#win{position:absolute;inset:6% 7%;background:var(--bg);border-radius:14px;box-shadow:0 30px 80px #000a;display:flex;flex-direction:column;overflow:hidden;border:1px solid #2a2e3a}
+#bar{height:40px;background:var(--bar);display:flex;align-items:center;gap:8px;padding:0 16px;color:#8b90a0;font-size:14px}
+#bar i{width:12px;height:12px;border-radius:50%;display:inline-block}#bar span{margin-left:14px}
+#term{flex:1;padding:22px 28px;color:var(--fg);font-size:23px;line-height:1.5;overflow:hidden;white-space:pre-wrap;word-break:break-word}
+.p{color:var(--acc)}.d{color:#6b7184}.g{color:#7ee787}.r{color:#ff7b72}.y{color:#e3b341}.b{color:#79c0ff}
+.cur{display:inline-block;width:.6em;height:1.1em;background:var(--fg);vertical-align:text-bottom;animation:bl 1s steps(1) infinite}@keyframes bl{50%{opacity:0}}
+</style></head><body>
+<div id="win"><div id="bar"><i style="background:#ff5f57"></i><i style="background:#febc2e"></i><i style="background:#28c840"></i><span>~/project - zsh</span></div><div id="term"></div></div>
+<script>
+const term = document.getElementById('term'), PROMPT = '<span class="p">$</span> ';
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+const esc = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;');
+const col = s => esc(s).replace(/\{([grybd])\}/g, '<span class="$1">').replace(/\{\/\}/g, '</span>');
+let line = null, armed = false;     // armed: the last line is an empty prompt waiting for a command
+function newLine(html) { line = document.createElement('div'); line.innerHTML = html; term.appendChild(line); term.scrollTop = term.scrollHeight; return line; }
+function cursor(on) { const c = term.querySelector('.cur'); if (c) c.remove(); if (on && line) line.insertAdjacentHTML('beforeend', '<span class="cur"></span>'); }
+window.T = {
+  async cmd(text, o) { const sp = (o && o.speed) || 38; if (!armed) newLine(PROMPT); armed = false; const base = line.innerHTML; let typed = '';
+    for (const ch of text) { typed += ch; line.innerHTML = base + esc(typed); cursor(true); await sleep(sp + Math.random() * 22); }
+    await sleep(380); cursor(false); },
+  async out(lines, o) { const d = (o && o.delay) || 120; for (const l of [].concat(lines)) { newLine(col(l)); await sleep(d); } cursor(false); },
+  async comment(t) { newLine('<span class="d"># ' + esc(t) + '</span>'); await sleep(200); },
+  async wait(ms) { await sleep(ms); },
+  clear() { term.innerHTML = ''; line = null; newLine(PROMPT); armed = true; cursor(true); },
+  async run(steps) { for (const [k, a, o] of steps) { if (k === 'cmd') await T.cmd(a, o); else if (k === 'out') await T.out(a, o); else if (k === 'comment') await T.comment(a); else if (k === 'wait') await T.wait(a); else if (k === 'clear') T.clear(); } if (!armed) { newLine(PROMPT); armed = true; } cursor(true); }
+};
+newLine(PROMPT); armed = true; cursor(true);
+</script></body></html>

@@ -1,0 +1,77 @@
+{
+  "title": "CLI demo (example)",
+  "stages": {
+    "intro": {
+      "align": "center",
+      "mark": true,
+      "eyebrow": "Command line",
+      "title": "Two **tools**, one video",
+      "sub": "Typed commands and real output, narrated."
+    },
+    "outro": {
+      "align": "center",
+      "mark": true,
+      "title": "That's the **terminal** replay",
+      "sub": "Paste real output; narrate what it means.",
+      "cmd": "assets/terminal-replay.html",
+      "url": "see references/storyboard.md"
+    }
+  },
+  "beats": [
+    {
+      "chapter": "Intro",
+      "say": "Command line tools can be filmed the same way as web apps, by replaying a real terminal session.",
+      "do": [
+        {
+          "stage": "intro"
+        },
+        {
+          "wait": 1.0
+        }
+      ]
+    },
+    {
+      "chapter": "Check the tools",
+      "say": "First we check which version of Python is installed.",
+      "do": [
+        {
+          "stage": null
+        },
+        {
+          "wait": 0.6
+        },
+        {
+          "eval": "T.run([['cmd','python3 --version'],['out',['Python 3.13.16']]])"
+        }
+      ]
+    },
+    {
+      "say": "Then the video encoder. Both print one line, and both are exactly what the real tools printed.",
+      "do": [
+        {
+          "eval": "T.run([['cmd','ffmpeg -version | head -1'],['out',['ffmpeg version 6.1.1-3ubuntu5 Copyright (c) 2000']]])"
+        }
+      ]
+    },
+    {
+      "say": "Colour helps a viewer see success at a glance.",
+      "do": [
+        {
+          "eval": "T.run([['cmd','run-checks'],['out',['{g}passed{/} 42 tests','{y}warning{/} 1 slow test','{r}failed{/} 0']],['wait',500]])"
+        }
+      ]
+    },
+    {
+      "chapter": "Wrap up",
+      "say": "Paste the real output, then narrate what it means.",
+      "do": [
+        {
+          "stage": "outro"
+        },
+        {
+          "wait": 1.0
+        }
+      ]
+    }
+  ]
+}

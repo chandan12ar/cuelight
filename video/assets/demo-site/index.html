@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Acme Reports</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+:root{--acc:#2f6fed;--bg:#f4f6fb;--card:#fff;--ink:#1c2333;--mut:#6b7488}
+*{box-sizing:border-box}body{margin:0;font:17px/1.45 system-ui,sans-serif;background:var(--bg);color:var(--ink);display:flex}
+aside{width:220px;min-height:100vh;background:#fff;border-right:1px solid #e3e7f0;padding:22px 14px;position:fixed;top:0;bottom:0}
+aside h1{font-size:19px;margin:0 8px 22px;color:var(--acc)}
+#nav button{display:block;width:100%;text-align:left;font:inherit;padding:10px 14px;margin:3px 0;border:0;border-radius:10px;background:none;cursor:pointer;color:var(--ink)}
+#nav button.on{background:color-mix(in srgb,var(--acc) 12%,#fff);color:var(--acc);font-weight:600}
+main{margin-left:220px;padding:28px 34px;width:calc(100% - 220px)}
+section[hidden]{display:none}h2{margin:0 0 18px;font-size:26px}
+.kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:22px}
+.kpi{background:var(--card);border-radius:14px;padding:18px;box-shadow:0 1px 4px #0001}.kpi b{display:block;font-size:30px}.kpi span{color:var(--mut);font-size:14px}
+.card{background:var(--card);border-radius:14px;padding:20px 22px;margin-bottom:22px;box-shadow:0 1px 4px #0001}.card h3{margin:0 0 12px;font-size:19px}
+canvas{width:100%;height:260px;display:block}.tw{overflow-x:auto}table{border-collapse:collapse;width:1900px}th,td{padding:9px 14px;border-bottom:1px solid #edf0f6;text-align:left;white-space:nowrap}
+.pad{height:360px;color:var(--mut)}
+.search{font:inherit;width:100%;max-width:520px;padding:12px 16px;margin:0 0 20px;border:1px solid #d6dbe7;border-radius:12px;background:#fff;color:var(--ink);outline:none}
+.search:focus{border-color:var(--acc);box-shadow:0 0 0 3px color-mix(in srgb,var(--acc) 18%,transparent)}.card[hidden]{display:none}
+</style></head><body>
+<aside><h1>Acme Reports</h1><div id="nav"><button data-s="overview" class="on">Overview</button><button data-s="usage">Usage</button><button data-s="reports">Reports</button></div></aside>
+<main>
+<section id="s-overview"><h2>Overview</h2>
+ <div class="kpis"><div class="kpi"><b>$12.4k</b><span>Revenue this week</span></div><div class="kpi"><b>342</b><span>Active users</span></div><div class="kpi"><b>4.1%</b><span>Churn</span></div><div class="kpi"><b>52</b><span>NPS</span></div></div>
+ <div class="card" id="trend"><h3>Revenue trend</h3><canvas id="c1" width="1200" height="260"></canvas></div>
+ <div class="card"><h3>Top accounts</h3><p>Owner contact: jane.doe@acme-example.com &middot; key sk-demo1234567890abcdefghij</p><div class="pad">More rows below the fold.</div></div>
+</section>
+<section id="s-usage" hidden><h2>Usage</h2>
+ <div class="card"><h3>Daily active users</h3><canvas id="c2" width="1200" height="260"></canvas></div>
+ <div class="card" id="adoption"><h3>Feature adoption</h3><div class="tw"><table><tr><th>Feature</th><th>Mon</th><th>Tue</th><th>Wed</th><th>Thu</th><th>Fri</th><th>Sat</th><th>Sun</th><th>Trend</th><th>Owner</th><th>Notes</th><th>Status</th></tr>
+ <tr><td>Search</td><td>81</td><td>84</td><td>80</td><td>86</td><td>88</td><td>41</td><td>39</td><td>up</td><td>Priya</td><td>Fast</td><td>Healthy</td></tr>
+ <tr><td>Export</td><td>22</td><td>25</td><td>24</td><td>28</td><td>31</td><td>9</td><td>8</td><td>up</td><td>Sam</td><td>Needs docs</td><td>Watch</td></tr></table></div></div>
+</section>
+<section id="s-reports" hidden><h2>Reports</h2>
+ <input id="q" class="search" placeholder="Search reports" autocomplete="off">
+ <div class="card rep"><h3>Weekly summary</h3><p>Revenue grew 6% and churn fell for the third week running.</p></div>
+ <div class="card rep"><h3>Scheduled reports</h3><p>Monday 08:00 &middot; Finance team &middot; PDF</p></div>
+ <div class="card rep"><h3>Cancellations deep dive</h3><p>Every account that left this month, and the reason they gave.</p></div>
+</section></main>
+<script>
+const show=s=>{document.querySelectorAll('main section').forEach(x=>x.hidden=x.id!=='s-'+s);document.querySelectorAll('#nav button').forEach(b=>b.classList.toggle('on',b.dataset.s===s));scrollTo(0,0)};
+document.getElementById('nav').onclick=e=>{const b=e.target.closest('button');if(b)show(b.dataset.s)};
+document.getElementById('q').oninput=e=>{const q=e.target.value.toLowerCase();document.querySelectorAll('.rep').forEach(c=>c.hidden=!c.textContent.toLowerCase().includes(q))};
+function line(id,pts){const c=document.getElementById(id),x=c.getContext('2d');x.clearRect(0,0,1200,260);x.strokeStyle='#2f6fed';x.lineWidth=4;x.beginPath();
+ pts.forEach((p,i)=>{const X=30+i*(1140/(pts.length-1)),Y=240-p*2;i?x.lineTo(X,Y):x.moveTo(X,Y)});x.stroke()}
+line('c1',[40,55,50,70,66,88,95,92,110]);line('c2',[30,38,35,60,58,72,70,80,86]);
+</script></body></html>

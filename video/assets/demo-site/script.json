@@ -1,0 +1,28 @@
+{
+  "title": "Selftest walkthrough",
+  "tone": "explainer",
+  "share": "Acme Reports puts revenue, active users and churn on one page, and its report search filters as you type.",
+  "look": {"frame": "window", "background": "brand", "camera": "auto"},
+  "voice": {"finish": "warm"},
+  "cast": {
+    "host": {"name": "Alex"},
+    "guest": {"name": "Maya"}
+  },
+  "stages": {
+    "intro": {"align": "center", "mark": true, "eyebrow": "Self test", "title": "Acme **Reports**", "sub": "A tiny app used to check the video pipeline."},
+    "problem": {"eyebrow": "The problem", "title": "Numbers live in **many places**", "items": [{"k": "Billing", "v": "Revenue only."}, {"k": "Analytics", "v": "Usage only."}, {"v": "Nobody can answer: are we growing?"}]},
+    "outro": {"align": "center", "mark": true, "title": "Acme **Reports**", "sub": "One page, every Monday.", "cmd": "open reports.acme.example", "url": "acme.example"}
+  },
+  "beats": [
+    {"chapter": "Intro", "who": "host", "mood": "warm", "say": "Are we growing? Acme Reports answers that on one page, and this tiny version tests the whole video pipeline.", "do": [{"stage": "intro"}, {"wait": 1.0}]},
+    {"chapter": "The problem", "who": "host", "say": "Most teams keep their numbers in several tools, and none of them answers that one simple question.", "do": [{"stage": "problem"}, {"reveal": "over"}]},
+    {"chapter": "Overview", "who": "host", "mood": "curious", "pause": 0.3, "say": "Maya, where should I look first?", "do": [{"stage": null}, {"wait": 0.4}, {"tab": "#nav button[data-s=overview]"}]},
+    {"who": "guest", "mood": "happy", "say": "Right here on the overview tab, where four numbers show how the week went.", "do": [{"spot": ".kpis", "label": "This week"}]},
+    {"who": "guest", "say": "Revenue comes first, and below it the trend. The email and the key on the next card are blurred.", "do": [{"spot": null}, {"circle": ".kpi:first-child b"}, {"wait": 1.2}, {"scroll": "#trend", "ms": 1200}, {"spot": "#trend", "label": "Revenue trend"}, {"sweep": "#c1", "over": true}]},
+    {"chapter": "Usage", "who": "host", "mood": "curious", "pause": 0.3, "say": "And who is actually using the product?", "do": [{"spot": null}, {"tab": "#nav button[data-s=usage]"}]},
+    {"who": "guest", "say": "This table shows it. It is wider than the screen, so we scroll it sideways to see every column.", "do": [{"scroll": "#adoption"}, {"spot": "#adoption", "label": "Feature adoption"}, {"hscroll": ".tw", "to": 1, "ms": 2200}, {"hscroll": ".tw", "to": 0, "ms": 1200}, {"underline": "text:Search", "zoom": false}]},
+    {"chapter": "Reports", "who": "host", "mood": "excited", "say": "On the reports tab, the search filters the list with every letter you type.", "do": [{"spot": null}, {"tab": "#nav button[data-s=reports]"}, {"type": "#q", "text": "cancel", "over": true, "enter": true}]},
+    {"who": "guest", "mood": "excited", "say": "One report is left, the cancellations deep dive, so the answer is a single click away.", "do": [{"highlight": "text:Cancellations deep dive"}, {"arrow": "text:Cancellations deep dive", "label": "The match"}, {"wait": 1.2}, {"spot": ".rep:not([hidden])", "label": "One click away"}]},
+    {"chapter": "Wrap up", "who": "host", "mood": "warm", "say": "That is everything the pipeline does in one short run.", "do": [{"spot": null}, {"stage": "outro"}, {"wait": 1.0}]}
+  ]
+}

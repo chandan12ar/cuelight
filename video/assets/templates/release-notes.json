@@ -1,0 +1,17 @@
+{
+  "_how_to_use": "Short 'what's new' video for a release: 3-5 changes, each shown in the live product. 60-90 seconds total. One beat per change, with the change's name in the chapter so viewers can jump to it.",
+  "title": "TODO product vX.Y - what's new",
+  "tone": "launch",
+  "share": "TODO: 1-3 sentences for the post, specific to this product, in its own words",
+  "stages": {
+    "intro": {"align": "center", "mark": true, "eyebrow": "What's new", "title": "TODO **Product** vX.Y", "sub": "TODO headline of the release, one line"},
+    "outro": {"align": "center", "mark": true, "title": "Update today", "sub": "TODO who benefits most", "cmd": "TODO upgrade command", "url": "TODO changelog url"}
+  },
+  "beats": [
+    {"chapter": "Intro", "say": "TODO: version number, and the one headline change.", "do": [{"stage": "intro"}, {"wait": 1.0}]},
+    {"chapter": "TODO Change 1", "say": "TODO: what changed, why you asked for it, in the viewer's words.", "do": [{"stage": null}, {"wait": 0.8}, {"tab": "TODO where it lives"}, {"spot": "TODO the new thing", "label": "New"}]},
+    {"chapter": "TODO Change 2", "say": "TODO: second change; show it, do not just describe it.", "do": [{"spot": null}, {"scroll": "TODO target", "ms": 1400}, {"spot": "TODO target", "label": "New"}]},
+    {"chapter": "TODO Fixes", "say": "TODO: one sentence on the notable fixes.", "do": [{"spot": null}, {"scroll_y": 0, "ms": 900}]},
+    {"chapter": "Upgrade", "say": "TODO: how to update and where the full notes are.", "do": [{"stage": "outro"}, {"wait": 1.0}]}
+  ]
+}

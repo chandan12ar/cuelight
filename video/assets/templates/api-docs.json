@@ -1,0 +1,18 @@
+{
+  "_how_to_use": "Walkthrough of API / developer documentation. Show the shortest path to a working call. Pair with terminal-replay.html (second recording, or a stage) when you want to show curl output; copy REAL responses, never invent them.",
+  "title": "TODO API - first request in two minutes",
+  "tone": "tutorial",
+  "share": "TODO: 1-3 sentences for the post, specific to this product, in its own words",
+  "stages": {
+    "intro": {"align": "center", "mark": true, "eyebrow": "Developer docs", "title": "TODO **API** quickstart", "sub": "From zero to your first response"},
+    "outro": {"align": "center", "mark": true, "title": "Build something", "sub": "TODO next steps", "cmd": "TODO npm i / pip install", "url": "TODO docs url"}
+  },
+  "beats": [
+    {"chapter": "Intro", "say": "TODO: what the API lets you do, in one sentence.", "do": [{"stage": "intro"}, {"wait": 1.0}]},
+    {"chapter": "Authenticate", "say": "TODO: where to get a key, and a reminder to keep it secret.", "do": [{"stage": null}, {"wait": 0.8}, {"spot": "TODO auth section", "label": "Get a key"}]},
+    {"chapter": "First request", "say": "TODO: the smallest request that works. Read it in plain words, not symbol by symbol.", "do": [{"spot": null}, {"scroll": "TODO code sample", "ms": 1500}, {"spot": "TODO code sample", "label": "Your first call"}]},
+    {"say": "TODO: the shape of the response and the two fields people care about.", "do": [{"scroll": "TODO response sample"}, {"spot": "TODO response sample", "label": "Response"}]},
+    {"chapter": "Reference", "say": "TODO: how the reference is organised and how to find an endpoint.", "do": [{"spot": null}, {"click": "TODO search or nav"}, {"scroll": "TODO endpoint table"}, {"hscroll": "TODO wide table", "to": 1, "ms": 2000}, {"hscroll": "TODO wide table", "to": 0, "ms": 1000}]},
+    {"chapter": "Wrap up", "say": "TODO: errors, limits and where to get help.", "do": [{"spot": null}, {"stage": "outro"}, {"wait": 1.0}]}
+  ]
+}

@@ -1,0 +1,28 @@
+{
+  "_how_to_use": "Dashboard / analytics tool with several tabs. Run scripts/draft_storyboard.py first: it fills the per-tab beats with real selectors. This file shows the narrative shape and the kind of sentence each beat needs. Replace every TODO.",
+  "title": "TODO product - walkthrough",
+  "tone": "explainer",
+  "share": "TODO: 1-3 sentences for the post, specific to this product, in its own words",
+  "stages": {
+    "intro": {"align": "center", "mark": true, "eyebrow": "TODO category", "title": "TODO **Product**", "sub": "TODO one-line promise, 12 words max"},
+    "invisible": {"eyebrow": "The problem", "title": "TODO the thing nobody can see, **in plain words**", "sub": "TODO why it matters: cost, quality or time"},
+    "scattered": {"eyebrow": "What exists today", "title": "Answers are **scattered**", "items": [{"k": "TODO tool 1", "v": "TODO what it shows, and what it misses"}, {"k": "TODO tool 2", "v": "TODO"}, {"k": "TODO tool 3", "v": "TODO"}]},
+    "questions": {"eyebrow": "So nobody can answer", "title": "Simple questions go **unanswered**", "items": [{"v": "TODO question a manager asks"}, {"v": "TODO question a user asks"}, {"v": "TODO what should I do differently?"}]},
+    "solution": {"align": "center", "mark": true, "eyebrow": "The answer", "title": "TODO one sentence: what this is", "chips": ["TODO benefit 1", "TODO benefit 2", "TODO benefit 3"]},
+    "outro": {"align": "center", "mark": true, "title": "TODO **Product**", "sub": "TODO closing line", "cmd": "TODO command or URL to start", "url": "TODO"}
+  },
+  "beats": [
+    {"chapter": "Intro", "say": "TODO: This is <product>. One sentence on what it shows you.", "do": [{"stage": "intro"}, {"wait": 1.2}]},
+    {"chapter": "The problem", "say": "TODO: Name the invisible thing, then the cost of not seeing it. Two sentences.", "do": [{"stage": "invisible"}]},
+    {"say": "TODO: Say what people use today and why each falls short.", "do": [{"stage": "scattered"}, {"reveal": "over"}]},
+    {"say": "TODO: The questions nobody can answer today.", "do": [{"stage": "questions"}, {"reveal": "over"}]},
+    {"say": "TODO: What this product does, where the data comes from, what it costs or risks (ideally: nothing).", "do": [{"stage": "solution"}, {"reveal": "over"}]},
+    {"say": "TODO: Let's take a tour, tab by tab.", "do": [{"stage": null}, {"wait": 0.8}]},
+
+    {"chapter": "TODO Tab 1", "say": "TODO: the QUESTION this tab answers, in one sentence.", "do": [{"tab": "TODO nav target"}, {"spot": "TODO kpi row", "label": "TODO"}]},
+    {"say": "TODO: what to look at first and what a good or bad value means.", "do": [{"spot": null}, {"scroll": "TODO card", "ms": 1500}, {"spot": "TODO card", "label": "TODO"}, {"sweep": "TODO chart", "over": true}]},
+    {"say": "TODO: more below / to the right - and what the viewer can do with it.", "do": [{"scroll": "TODO table card"}, {"hscroll": "TODO wide table", "to": 1, "ms": 2200}, {"hscroll": "TODO wide table", "to": 0, "ms": 1200}]},
+
+    {"chapter": "Wrap up", "say": "TODO: one-line recap and the first step to try it.", "do": [{"spot": null}, {"stage": "outro"}, {"wait": 1.0}]}
+  ]
+}

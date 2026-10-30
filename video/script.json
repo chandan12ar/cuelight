@@ -1,0 +1,649 @@
+{
+ "title": "Cuelight - know the moment your Claude Code agents need you",
+ "tone": "explainer",
+ "share": "Cuelight is a free Claude Code plugin that tells you the moment an agent is waiting on you, has failed or has gone quiet, and shows the whole multi-agent run behind it: timeline, handoff graph, checks, spend and every prompt. Local, read-only, Python standard library only.",
+ "highlights": [
+  "The problem: multi-agent runs are invisible",
+  "Know the moment an agent needs you",
+  "Every feature of the dashboard, tab by tab"
+ ],
+ "look": {
+  "frame": "window",
+  "background": "blur",
+  "cards": "auto",
+  "camera": "auto",
+  "url": "127.0.0.1 - Cuelight"
+ },
+ "voice": {
+  "engine": "kokoro",
+  "voice": "af_heart",
+  "mood": "warm",
+  "finish": "warm"
+ },
+ "stages": {
+  "intro": {
+   "align": "center",
+   "mark": true,
+   "eyebrow": "A plugin for Claude Code",
+   "title": "**Cuelight**",
+   "sub": "Know the moment your agents need you"
+  },
+  "problem": {
+   "eyebrow": "The problem",
+   "title": "Multi-agent runs are **invisible**",
+   "sub": "One scrolling terminal. Many agents behind it. No idea which one is stuck, failed, or waiting on you."
+  },
+  "questions": {
+   "eyebrow": "So nobody can answer",
+   "title": "Simple questions go **unanswered**",
+   "items": [
+    {
+     "v": "Which agent needs me right now?"
+    },
+    {
+     "v": "Did they actually test their work?"
+    },
+    {
+     "v": "Who fed whom, and what held the run up?"
+    },
+    {
+     "v": "Where did the time and the money go?"
+    }
+   ]
+  },
+  "solution": {
+   "align": "center",
+   "mark": true,
+   "eyebrow": "The answer",
+   "title": "A live dashboard of **every agent**",
+   "sub": "Built from the transcripts Claude Code already writes",
+   "chips": [
+    "Runs on your machine",
+    "Read-only",
+    "No network calls",
+    "Python only, no build"
+   ]
+  },
+  "trust": {
+   "eyebrow": "Private by design",
+   "title": "Your code **never leaves** your machine",
+   "items": [
+    {
+     "k": "Local only",
+     "v": "127.0.0.1, token on every request"
+    },
+    {
+     "k": "Read-only",
+     "v": "Never writes to your Claude folder"
+    },
+    {
+     "k": "Redacted",
+     "v": "Secrets scrubbed from every export"
+    },
+    {
+     "k": "No egress",
+     "v": "No network calls, no telemetry"
+    }
+   ]
+  },
+  "next": {
+   "eyebrow": "What comes next",
+   "title": "One control plane for **every coding agent**",
+   "items": [
+    {
+     "k": "Today",
+     "v": "Claude Code"
+    },
+    {
+     "k": "Next",
+     "v": "GitHub Copilot CLI"
+    },
+    {
+     "k": "Then",
+     "v": "VS Code and Codex"
+    }
+   ]
+  },
+  "outro": {
+   "align": "center",
+   "mark": true,
+   "title": "**Cuelight**",
+   "sub": "Know the moment your agents need you",
+   "cmd": "/plugin marketplace add chandan12ar/cuelight",
+   "url": "github.com/chandan12ar/cuelight"
+  }
+ },
+ "beats": [
+  {
+   "chapter": "Intro",
+   "say": "You start five Claude Code agents, switch windows, and ten minutes later find one was waiting on your permission the whole time.",
+   "do": [
+    {
+     "stage": "intro"
+    },
+    {
+     "wait": 1.0
+    }
+   ]
+  },
+  {
+   "chapter": "The problem",
+   "say": "That is the problem with multi-agent work: it is invisible. One scrolling terminal, many agents behind it, and no way to see which one is stuck.",
+   "do": [
+    {
+     "stage": "problem"
+    }
+   ]
+  },
+  {
+   "say": "So simple questions go unanswered. Which agent needs me? Did they test their work? What held the run up? And where did the money go?",
+   "do": [
+    {
+     "stage": "questions"
+    },
+    {
+     "reveal": "over"
+    }
+   ]
+  },
+  {
+   "say": "Cuelight answers them. It reads the transcripts Claude Code already writes and turns them into a live dashboard, on your own machine, read-only.",
+   "do": [
+    {
+     "stage": "solution"
+    },
+    {
+     "reveal": "over"
+    }
+   ]
+  },
+  {
+   "chapter": "Needs you",
+   "say": "Here is a live run: thirteen agents shipping a checkout rewrite. The header answers the first question at a glance: running, waiting, failed, and cost against your budget.",
+   "do": [
+    {
+     "stage": null
+    },
+    {
+     "wait": 0.6
+    },
+    {
+     "badge": "{BADGE}"
+    },
+    {
+     "spot": "#totals",
+     "label": "The run at a glance"
+    }
+   ]
+  },
+  {
+   "say": "Right below it, this bar says Claude is waiting for your permission, so you switch back now, not ten minutes later.",
+   "do": [
+    {
+     "spot": null
+    },
+    {
+     "underline": "#attention"
+    },
+    {
+     "hover": "#attention"
+    }
+   ]
+  },
+  {
+   "say": "The attention box names every agent that needs a look, and why: unchecked, stalled, retrying, failed, or stuck in a possible loop.",
+   "do": [
+    {
+     "spot": "#health",
+     "label": "Who needs a look, and why"
+    }
+   ]
+  },
+  {
+   "say": "And when two agents write the same file, Cuelight names both of them, before their edits collide in your merge.",
+   "do": [
+    {
+     "spot": "#conflicts",
+     "label": "Clashing edits"
+    }
+   ]
+  },
+  {
+   "say": "The Pulse strip is a ticker for the run: agents running, tool calls per minute, fresh tokens, and what needs you, each a real series from the transcripts.",
+   "do": [
+    {
+     "spot": null
+    },
+    {
+     "scroll": "#pulse",
+     "ms": 1400
+    },
+    {
+     "sweep": "#pulse .pulse-card:nth-child(2), #pulse",
+     "over": true
+    }
+   ]
+  },
+  {
+   "say": "Turn on the Pill and a tiny cue light floats over your editor. It sleeps when all is quiet, and hops the moment an agent needs you.",
+   "do": [
+    {
+     "scroll_y": 0,
+     "ms": 1000
+    },
+    {
+     "arrow": "#pill-toggle",
+     "label": "Always-on-top cue light"
+    },
+    {
+     "hover": "#pill-toggle"
+    }
+   ]
+  },
+  {
+   "chapter": "Search",
+   "say": "Press Control K and search the whole run. Type unit tests, and the failing test agent and every call it made are right there.",
+   "do": [
+    {
+     "key": "Control+K"
+    },
+    {
+     "type": "#palette-input",
+     "text": "unit tests",
+     "cps": 9
+    },
+    {
+     "wait": 1.2
+    }
+   ]
+  },
+  {
+   "say": "Press Escape, and you are back on the dashboard, with every view one tab away.",
+   "do": [
+    {
+     "key": "Escape"
+    },
+    {
+     "scroll": "nav.tabs",
+     "ms": 1200
+    },
+    {
+     "spot": "nav.tabs",
+     "label": "Ten views"
+    }
+   ]
+  },
+  {
+   "chapter": "Timeline",
+   "say": "The Timeline draws every agent as a bar: when it started, how long it ran, and which wave it belonged to. Outlined bars are the critical path.",
+   "do": [
+    {
+     "spot": null
+    },
+    {
+     "tab": "button.tab[data-view=timeline]"
+    },
+    {
+     "scroll": "nav.tabs",
+     "ms": 1200
+    },
+    {
+     "sweep": "#timeline",
+     "over": true
+    }
+   ]
+  },
+  {
+   "chapter": "Graph",
+   "say": "The Graph answers who fed whom. Solid edges are exact handoffs, dashed ones are inferred, and every edge opens its evidence.",
+   "do": [
+    {
+     "tab": "button.tab[data-view=graph]"
+    },
+    {
+     "scroll": "nav.tabs",
+     "ms": 1200
+    },
+    {
+     "hover": "node:Design the checkout",
+     "zoom": false
+    },
+    {
+     "wait": 1.5
+    },
+    {
+     "hover": "node:Build the payment adapter",
+     "zoom": false
+    }
+   ]
+  },
+  {
+   "chapter": "Agents",
+   "say": "The Agents tab puts every agent on one row: what it was asked, what its brief said to deliver, and what it actually reported back.",
+   "do": [
+    {
+     "tab": "button.tab[data-view=agents]"
+    },
+    {
+     "scroll": "nav.tabs",
+     "ms": 1200
+    },
+    {
+     "spot": "#agents thead",
+     "label": "Asked, expected, came back"
+    }
+   ]
+  },
+  {
+   "say": "Open any agent for its full story: model, tokens, cost, cache hits, whether it checked its work, and which instruction files it loaded.",
+   "do": [
+    {
+     "spot": null
+    },
+    {
+     "click": "#agents tbody tr:nth-child(5)"
+    },
+    {
+     "wait": 0.8
+    },
+    {
+     "scroll_sheet": "#drawer"
+    }
+   ]
+  },
+  {
+   "say": "Close it, and one click keeps only the agents that need a look, with the reason written on each row.",
+   "do": [
+    {
+     "key": "Escape"
+    },
+    {
+     "wait": 0.4
+    },
+    {
+     "click": "button.agents-only"
+    },
+    {
+     "wait": 0.8
+    },
+    {
+     "scroll": "#agents tbody",
+     "ms": 1600
+    }
+   ]
+  },
+  {
+   "chapter": "Insights",
+   "say": "Insights answers the questions a run raises once it is over. The strip at the top says what each card found, worst first.",
+   "do": [
+    {
+     "tab": "button.tab[data-view=insights]"
+    },
+    {
+     "scroll": "nav.tabs",
+     "ms": 1200
+    },
+    {
+     "spot": ".glance, #insights > div:first-child",
+     "label": "Worst first"
+    }
+   ]
+  },
+  {
+   "say": "The critical path is the chain of agents that set the length of the run. Speeding up any other agent will not finish it sooner.",
+   "do": [
+    {
+     "spot": null
+    },
+    {
+     "scroll": "card:Critical path",
+     "ms": 1500
+    },
+    {
+     "spot": "card:Critical path",
+     "label": "What held the run up"
+    }
+   ]
+  },
+  {
+   "say": "What the run produced lists the commits, the pull request and every test run, with the cost of each commit.",
+   "do": [
+    {
+     "spot": null
+    },
+    {
+     "scroll": "card:What the run produced",
+     "ms": 1500
+    },
+    {
+     "circle": "h:Pull requests"
+    }
+   ]
+  },
+  {
+   "say": "Did they check their work? For every agent that edited code, Cuelight shows whether it ran a test after its last edit, and whether that passed.",
+   "do": [
+    {
+     "scroll": "card:Did they check their work",
+     "ms": 1500
+    },
+    {
+     "spot": "card:Did they check their work",
+     "label": "No silent, untested work"
+    }
+   ]
+  },
+  {
+   "say": "Further down, what went wrong: API stalls, failed calls, retries and timeouts, and the tokens wasted when the prompt cache had to be rebuilt.",
+   "do": [
+    {
+     "spot": null
+    },
+    {
+     "scroll": "card:What went wrong",
+     "ms": 1600
+    },
+    {
+     "wait": 1.5
+    },
+    {
+     "scroll": "card:Where tokens were wasted",
+     "ms": 1600
+    }
+   ]
+  },
+  {
+   "chapter": "Spend",
+   "say": "Spend shows what the session cost as it ran, the main session and its agents stacked, against your budget line.",
+   "do": [
+    {
+     "scroll": "nav.tabs",
+     "ms": 1000
+    },
+    {
+     "tab": "button.tab[data-view=spend]"
+    },
+    {
+     "scroll": "nav.tabs",
+     "ms": 1200
+    },
+    {
+     "sweep": "#spend svg",
+     "over": true
+    }
+   ]
+  },
+  {
+   "say": "Below the chart, the most expensive five minutes and the most expensive agents tell you exactly where the money went.",
+   "do": [
+    {
+     "scroll": "h:Most expensive five minutes",
+     "ms": 1500
+    },
+    {
+     "highlight": "h:Most expensive agents"
+    }
+   ]
+  },
+  {
+   "chapter": "Prompts",
+   "say": "Prompts ties the cost back to you: each message you sent, how long its work took, and what share of the session it cost.",
+   "do": [
+    {
+     "scroll": "nav.tabs",
+     "ms": 1000
+    },
+    {
+     "tab": "button.tab[data-view=prompts]"
+    },
+    {
+     "scroll": "nav.tabs",
+     "ms": 1200
+    },
+    {
+     "spot": "#prompts",
+     "label": "Cost per prompt"
+    }
+   ]
+  },
+  {
+   "chapter": "Activity",
+   "say": "Activity searches every tool call. Type npm test, and you see which agents ran it, and which runs failed.",
+   "do": [
+    {
+     "spot": null
+    },
+    {
+     "tab": "button.tab[data-view=activity]"
+    },
+    {
+     "scroll": "nav.tabs",
+     "ms": 1200
+    },
+    {
+     "type": "#calls-q",
+     "text": "npm test",
+     "cps": 8
+    },
+    {
+     "wait": 1.0
+    }
+   ]
+  },
+  {
+   "chapter": "Work Floor",
+   "say": "The Work Floor shows each agent as a little character, with what it is doing right now, grouped by role or by status.",
+   "do": [
+    {
+     "tab": "button.tab[data-view=workfloor]"
+    },
+    {
+     "scroll": "nav.tabs",
+     "ms": 1200
+    },
+    {
+     "scroll": "h:General Purpose",
+     "ms": 1800
+    }
+   ]
+  },
+  {
+   "chapter": "Fleet",
+   "say": "And Fleet watches all your sessions across projects. The one that needs you sits on top, with Claude Code's own recap of each.",
+   "do": [
+    {
+     "scroll": "nav.tabs",
+     "ms": 800
+    },
+    {
+     "tab": "button.tab[data-view=fleet]"
+    },
+    {
+     "scroll": "nav.tabs",
+     "ms": 1200
+    },
+    {
+     "spot": "#fleet",
+     "label": "Every session, the one that needs you first"
+    }
+   ]
+  },
+  {
+   "chapter": "Share",
+   "say": "When the run is done, replay it, copy a summary, or export it, and secrets are redacted in everything that leaves.",
+   "do": [
+    {
+     "spot": null
+    },
+    {
+     "scroll_y": 0,
+     "ms": 1000
+    },
+    {
+     "spot": [
+      "#replay-toggle",
+      "#copy-summary",
+      "#export-select"
+     ],
+     "label": "Replay, summary, export"
+    }
+   ]
+  },
+  {
+   "say": "It even follows your theme, light or dark.",
+   "do": [
+    {
+     "spot": null
+    },
+    {
+     "click": "#theme-toggle"
+    },
+    {
+     "wait": 0.6
+    },
+    {
+     "click": "#theme-toggle"
+    },
+    {
+     "wait": 0.8
+    }
+   ]
+  },
+  {
+   "chapter": "Private",
+   "say": "Cuelight is private by design. It listens only on your own machine, needs a token for its data, and makes no network calls at all.",
+   "do": [
+    {
+     "stage": "trust"
+    },
+    {
+     "reveal": "over"
+    }
+   ]
+  },
+  {
+   "chapter": "What's next",
+   "say": "Today it watches Claude Code. Next comes GitHub Copilot CLI, then VS Code and Codex: one control plane for every coding agent you run.",
+   "do": [
+    {
+     "stage": "next"
+    },
+    {
+     "reveal": "over"
+    }
+   ]
+  },
+  {
+   "chapter": "Get started",
+   "say": "Add it from the plugin marketplace, type slash cuelight open, and know the moment your agents need you.",
+   "do": [
+    {
+     "stage": "outro"
+    },
+    {
+     "wait": 1.2
+    }
+   ]
+  }
+ ]
+}

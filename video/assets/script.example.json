@@ -1,0 +1,26 @@
+{
+  "title": "Example product walkthrough",
+  "stages": {
+    "intro":   {"align": "center", "mark": true, "eyebrow": "Product tour", "title": "Acme **Reports**", "sub": "See your weekly numbers in one place."},
+    "problem": {"eyebrow": "The problem", "title": "Numbers live in **five tools**", "items": [
+      {"k": "Billing", "v": "Revenue, but no usage."},
+      {"k": "Product analytics", "v": "Usage, but no revenue."},
+      {"v": "So nobody can answer: are we growing?"}
+    ]},
+    "outro":   {"align": "center", "mark": true, "title": "Acme **Reports**", "sub": "One page. Every Monday.", "cmd": "pip install acme-reports", "url": "acme.example.com"}
+  },
+  "beats": [
+    {"chapter": "Intro", "say": "This is Acme Reports. One page that shows how your business is really doing.",
+     "do": [{"stage": "intro"}, {"wait": 1.0}]},
+    {"chapter": "The problem", "say": "Today your numbers live in five different tools, and none of them answers the simple question. Are we growing?",
+     "do": [{"stage": "problem"}, {"reveal": "over"}]},
+    {"chapter": "Overview", "say": "Let's start with the overview tab. At the top are the four numbers that matter this week.",
+     "do": [{"stage": null}, {"wait": 0.8}, {"tab": "text:Overview"}, {"spot": ["#kpis"], "label": "This week"}]},
+    {"say": "Scroll down and you get the trend, with every point you can hover over.",
+     "do": [{"spot": null}, {"scroll": "#trend", "ms": 1600}, {"hover": "#trend"}, {"sweep": "#trend", "over": true}]},
+    {"say": "Wide tables scroll sideways, so nothing is hidden.",
+     "do": [{"scroll": "#table"}, {"hscroll": "#table", "to": 1, "ms": 2200}, {"hscroll": "#table", "to": 0, "ms": 1200}]},
+    {"chapter": "Wrap up", "say": "That's Acme Reports. One page, every Monday.",
+     "do": [{"spot": null}, {"stage": "outro"}, {"wait": 1.0}]}
+  ]
+}
