@@ -27,7 +27,7 @@
     box-shadow:0 0 0 3px var(--v-acc),0 0 0 9999px rgba(12,14,20,.34),0 0 36px 4px color-mix(in srgb,var(--v-acc) 35%,transparent);
     transition:opacity .35s ease}
   #v-spot.on{opacity:1}
-  #v-spot.pulse{animation:v-pulse 2.2s ease-in-out infinite}
+  #v-spot.v-pulsing{animation:v-pulse 2.2s ease-in-out infinite}
   @keyframes v-pulse{50%{box-shadow:0 0 0 5px var(--v-acc),0 0 0 9999px rgba(12,14,20,.34),0 0 52px 10px color-mix(in srgb,var(--v-acc) 50%,transparent)}}
   #v-label{position:fixed;z-index:2147483200;padding:7px 14px;border-radius:999px;background:var(--v-acc);color:#fff;
     font-weight:650;font-size:15px;letter-spacing:.01em;box-shadow:0 6px 20px rgba(0,0,0,.28);opacity:0;
@@ -292,12 +292,12 @@
     },
     spot(targets, label) {
       const sp = $('v-spot'), lb = $('v-label');
-      if (!targets) { spotTargets = null; sp.classList.remove('on', 'pulse'); lb.classList.remove('on'); return true; }
+      if (!targets) { spotTargets = null; sp.classList.remove('on', 'v-pulsing'); lb.classList.remove('on'); return true; }
       if (!rectOf(targets)) return false;
       spotTargets = targets; spotLabel = label || null;
       if (!raf) raf = requestAnimationFrame(track);
       track_once();
-      sp.classList.add('on', 'pulse');
+      sp.classList.add('on', 'v-pulsing');
       lb.classList.toggle('on', !!label);
       return true;
     },

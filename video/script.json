@@ -187,6 +187,13 @@
     },
     {
      "hover": "#attention"
+    },
+    {
+     "wait": 1.6
+    },
+    {
+     "spot": "#attention",
+     "label": "Claude is waiting on you"
     }
    ]
   },
