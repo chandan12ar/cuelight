@@ -523,6 +523,9 @@
      "tab": "button.tab[data-view=activity]"
     },
     {
+     "wait": 1.0
+    },
+    {
      "scroll": "nav.tabs",
      "ms": 1200
     },
