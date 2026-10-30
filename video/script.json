@@ -523,7 +523,10 @@
      "tab": "button.tab[data-view=activity]"
     },
     {
-     "wait": 1.0
+     "eval": "document.getElementById('main').style.minHeight='1500px'"
+    },
+    {
+     "wait": 0.8
     },
     {
      "scroll": "nav.tabs",
@@ -543,6 +546,9 @@
    "chapter": "Work Floor",
    "say": "The Work Floor shows each agent as a little character, with what it is doing right now, grouped by role or by status.",
    "do": [
+    {
+     "eval": "document.getElementById('main').style.minHeight=''"
+    },
     {
      "tab": "button.tab[data-view=workfloor]"
     },
